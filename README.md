@@ -55,7 +55,7 @@ Same URL: **http://localhost:3000**
 ### If port 3000 is already in use
 
 ```bash
-npx next dev --hostname localhost --port 3001
+npx next dev --hostname 0.0.0.0 --port 3001
 ```
 
 Then open http://localhost:3001.
