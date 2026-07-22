@@ -64,35 +64,34 @@ export type InventoryItem = {
 /**
  * One sales line from the sales department feed.
  * Source file: data/sales/sales.json
+ *
+ * Fields match the sales check-list columns: sku, name, quantity, rateOfSale.
  */
 export type SalesItem = {
   sku: string;
-  name?: string;
+  name: string;
   /** Units sold that should be subtracted from inventory. */
-  quantitySold: number;
-  /** Optional sale date YYYY-MM-DD for auditing. */
-  saleDate?: string;
+  quantity: number;
+  /** Observed / reported rate of sale for this SKU (units per day). */
+  rateOfSale: number;
 };
 
 /**
  * One incoming supply line from warehousing / receiving.
  * Source file: data/incoming/incoming.json
  *
- * Extra fields (rateOfSale, storageRequirements, thresholds) are optional and only
- * needed when the shipment introduces a brand-new SKU not already in inventory.
+ * Fields match the incoming check-list columns:
+ * sku, name, quantity, expiration, storageRequirements.
  */
 export type IncomingItem = {
   sku: string;
-  name?: string;
+  name: string;
   /** Units received that should be added to inventory. */
-  quantityReceived: number;
-  /** New expiration for this lot (YYYY-MM-DD). Used when present. */
-  expiration?: string;
-  receivedDate?: string;
-  rateOfSale?: number;
-  storageRequirements?: string;
-  reorderThreshold?: number;
-  overstockThreshold?: number;
+  quantity: number;
+  /** Lot expiration date YYYY-MM-DD. */
+  expiration: string;
+  /** Where this shipment must be stored. */
+  storageRequirements: string;
 };
 
 /** Categories of attention badges shown at the top of the monitoring page. */
@@ -283,23 +282,27 @@ export function applyInventoryUpdates(
   for (const shipment of incoming) {
     const existing = bySku.get(shipment.sku);
     if (existing) {
-      existing.quantity += shipment.quantityReceived;
-      // Prefer the newer lot expiration when the shipment provides one.
+      existing.quantity += shipment.quantity;
+      // Prefer the newer lot expiration from the shipment.
       if (shipment.expiration) {
         existing.expiration = shipment.expiration;
       }
       if (shipment.name) existing.name = shipment.name;
+      if (shipment.storageRequirements) {
+        existing.storageRequirements = shipment.storageRequirements;
+      }
     } else {
       // Brand-new SKU arriving for the first time — fill sensible defaults.
       bySku.set(shipment.sku, {
         sku: shipment.sku,
-        name: shipment.name ?? shipment.sku,
-        quantity: shipment.quantityReceived,
-        expiration: shipment.expiration ?? "2099-12-31",
-        rateOfSale: shipment.rateOfSale ?? 0,
-        storageRequirements: shipment.storageRequirements ?? "Unspecified — update in inventory JSON",
-        reorderThreshold: shipment.reorderThreshold ?? DEFAULT_REORDER_THRESHOLD,
-        overstockThreshold: shipment.overstockThreshold ?? DEFAULT_OVERSTOCK_THRESHOLD,
+        name: shipment.name || shipment.sku,
+        quantity: shipment.quantity,
+        expiration: shipment.expiration || "2099-12-31",
+        rateOfSale: 0,
+        storageRequirements:
+          shipment.storageRequirements || "Unspecified — update in inventory JSON",
+        reorderThreshold: DEFAULT_REORDER_THRESHOLD,
+        overstockThreshold: DEFAULT_OVERSTOCK_THRESHOLD,
       });
     }
   }
@@ -311,7 +314,11 @@ export function applyInventoryUpdates(
       // Sale for an unknown SKU — skip rather than invent a negative product.
       continue;
     }
-    existing.quantity = Math.max(0, existing.quantity - sale.quantitySold);
+    existing.quantity = Math.max(0, existing.quantity - sale.quantity);
+    // Keep inventory rateOfSale in sync when sales feed reports a newer velocity.
+    if (typeof sale.rateOfSale === "number" && sale.rateOfSale >= 0) {
+      existing.rateOfSale = sale.rateOfSale;
+    }
   }
 
   return Array.from(bySku.values()).sort((a, b) => a.sku.localeCompare(b.sku));

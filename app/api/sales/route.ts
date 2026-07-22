@@ -8,7 +8,7 @@
  *
  * HOW TO MAINTAIN:
  * - Put sales exports into data/sales/sales.json (array of objects).
- * - Required fields per row: sku, quantitySold. Optional: name, saleDate.
+ * - Required fields per row: sku, name, quantity, rateOfSale.
  * ============================================================================
  */
 

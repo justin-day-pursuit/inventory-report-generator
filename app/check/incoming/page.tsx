@@ -8,7 +8,8 @@
  * verified before they are added into inventory.
  *
  * HOW TO MAINTAIN:
- * - Keep columns in sync with fields used in data/incoming/incoming.json.
+ * - Keep columns in sync with fields used in data/incoming/incoming.json:
+ *   sku, name, quantity, expiration, storageRequirements.
  * - New SKUs in this feed become new inventory rows when you run Update.
  * ============================================================================
  */
@@ -74,9 +75,9 @@ export default function CheckIncomingPage() {
               <tr>
                 <th className="px-4 py-3 font-medium">SKU</th>
                 <th className="px-4 py-3 font-medium">Name</th>
-                <th className="px-4 py-3 text-right font-medium">Qty received</th>
+                <th className="px-4 py-3 text-right font-medium">Quantity</th>
                 <th className="px-4 py-3 font-medium">Expiration</th>
-                <th className="px-4 py-3 font-medium">Received</th>
+                <th className="px-4 py-3 font-medium">Storage requirements</th>
               </tr>
             </thead>
             <tbody>
@@ -90,10 +91,10 @@ export default function CheckIncomingPage() {
                 items.map((row, idx) => (
                   <tr key={`${row.sku}-${idx}`} className="border-t border-white/5">
                     <td className="font-mono px-4 py-3 text-[var(--muted)]">{row.sku}</td>
-                    <td className="px-4 py-3">{row.name ?? "—"}</td>
-                    <td className="px-4 py-3 text-right">{row.quantityReceived}</td>
-                    <td className="px-4 py-3">{row.expiration ?? "—"}</td>
-                    <td className="px-4 py-3">{row.receivedDate ?? "—"}</td>
+                    <td className="px-4 py-3">{row.name}</td>
+                    <td className="px-4 py-3 text-right">{row.quantity}</td>
+                    <td className="px-4 py-3">{row.expiration}</td>
+                    <td className="px-4 py-3 text-[var(--muted)]">{row.storageRequirements}</td>
                   </tr>
                 ))
               )}

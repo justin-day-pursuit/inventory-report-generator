@@ -8,8 +8,7 @@
  *
  * HOW TO MAINTAIN:
  * - Put receiving exports into data/incoming/incoming.json (array of objects).
- * - Required fields per row: sku, quantityReceived.
- * - Optional: name, expiration, receivedDate, and defaults for brand-new SKUs.
+ * - Required fields per row: sku, name, quantity, expiration, storageRequirements.
  * ============================================================================
  */
 
