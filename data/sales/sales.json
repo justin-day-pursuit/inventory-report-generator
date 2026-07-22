@@ -1,0 +1,44 @@
+[
+  {
+    "sku": "SKU-001",
+    "name": "Organic Whole Milk 1gal",
+    "quantitySold": 8,
+    "saleDate": "2026-07-22"
+  },
+  {
+    "sku": "SKU-002",
+    "name": "Sourdough Loaf",
+    "quantitySold": 6,
+    "saleDate": "2026-07-22"
+  },
+  {
+    "sku": "SKU-003",
+    "name": "Free-Range Eggs (dozen)",
+    "quantitySold": 4,
+    "saleDate": "2026-07-22"
+  },
+  {
+    "sku": "SKU-005",
+    "name": "Baby Spinach 10oz",
+    "quantitySold": 5,
+    "saleDate": "2026-07-22"
+  },
+  {
+    "sku": "SKU-008",
+    "name": "Sparkling Water 12pk",
+    "quantitySold": 12,
+    "saleDate": "2026-07-22"
+  },
+  {
+    "sku": "SKU-009",
+    "name": "Avocados Hass (each)",
+    "quantitySold": 10,
+    "saleDate": "2026-07-22"
+  },
+  {
+    "sku": "SKU-010",
+    "name": "Chicken Breast Tray 2lb",
+    "quantitySold": 3,
+    "saleDate": "2026-07-22"
+  }
+]
