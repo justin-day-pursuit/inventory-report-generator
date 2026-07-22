@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0b1020;
+  --foreground: #e6e9f0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  color: var(--foreground);
+  background: linear-gradient(160deg, #0b1020 0%, #131a33 100%);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
