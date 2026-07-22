@@ -10,5 +10,5 @@ This is a Next.js 16 (App Router, Turbopack) + React 19 + TypeScript + Tailwind 
 - Core logic is framework-free in `lib/inventory.ts` (alerts, inventory updates from sales/supplies, report generation) and `lib/data-store.ts` (JSON file I/O). API routes under `app/api/*` and the UI in `app/page.tsx` call into them.
 - Mock JSON feeds (referenced by API routes):
   - `data/inventory/inventory.json` — current stock (`sku`, `name`, `quantity`, `expiration`, `rateOfSale`, `storageRequirements`, `reorderThreshold`, `overstockThreshold`)
-  - `data/sales/sales.json` — sold products (`sku`, `quantitySold`, optional `name`, `saleDate`)
-  - `data/incoming/incoming.json` — incoming supplies (`sku`, `quantityReceived`, optional lot/new-SKU fields)
+  - `data/sales/sales.json` — sold products (`sku`, `name`, `quantity`, `rateOfSale`)
+  - `data/incoming/incoming.json` — incoming supplies (`sku`, `name`, `quantity`, `expiration`, `storageRequirements`)

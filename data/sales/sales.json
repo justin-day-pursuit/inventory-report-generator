@@ -2,43 +2,295 @@
   {
     "sku": "SKU-001",
     "name": "Organic Whole Milk 1gal",
-    "quantitySold": 8,
-    "saleDate": "2026-07-22"
-  },
-  {
-    "sku": "SKU-002",
-    "name": "Sourdough Loaf",
-    "quantitySold": 6,
-    "saleDate": "2026-07-22"
+    "quantity": 7,
+    "rateOfSale": 15
   },
   {
     "sku": "SKU-003",
-    "name": "Free-Range Eggs (dozen)",
-    "quantitySold": 4,
-    "saleDate": "2026-07-22"
+    "name": "2% Reduced Fat Milk 1gal",
+    "quantity": 3,
+    "rateOfSale": 16
   },
   {
     "sku": "SKU-005",
-    "name": "Baby Spinach 10oz",
-    "quantitySold": 5,
-    "saleDate": "2026-07-22"
+    "name": "Fat-Free Skim Milk 1gal",
+    "quantity": 6,
+    "rateOfSale": 8
+  },
+  {
+    "sku": "SKU-006",
+    "name": "Organic 2% Milk 0.5gal",
+    "quantity": 7,
+    "rateOfSale": 7
   },
   {
     "sku": "SKU-008",
-    "name": "Sparkling Water 12pk",
-    "quantitySold": 12,
-    "saleDate": "2026-07-22"
+    "name": "Lactose-Free 2% Milk 0.5gal",
+    "quantity": 17,
+    "rateOfSale": 7
   },
   {
     "sku": "SKU-009",
-    "name": "Avocados Hass (each)",
-    "quantitySold": 10,
-    "saleDate": "2026-07-22"
+    "name": "Chocolate Milk 0.5gal",
+    "quantity": 6,
+    "rateOfSale": 14
   },
   {
-    "sku": "SKU-010",
-    "name": "Chicken Breast Tray 2lb",
-    "quantitySold": 3,
-    "saleDate": "2026-07-22"
+    "sku": "SKU-011",
+    "name": "A2 Whole Milk 0.5gal",
+    "quantity": 12,
+    "rateOfSale": 6
+  },
+  {
+    "sku": "SKU-012",
+    "name": "Ultra-Filtered Protein Milk 52oz",
+    "quantity": 1,
+    "rateOfSale": 7
+  },
+  {
+    "sku": "SKU-014",
+    "name": "Goat Milk 1qt",
+    "quantity": 10,
+    "rateOfSale": 2
+  },
+  {
+    "sku": "SKU-015",
+    "name": "Shelf-Stable Whole Milk 1qt",
+    "quantity": 3,
+    "rateOfSale": 5
+  },
+  {
+    "sku": "SKU-016",
+    "name": "Heavy Whipping Cream 1pt",
+    "quantity": 19,
+    "rateOfSale": 10
+  },
+  {
+    "sku": "SKU-017",
+    "name": "Light Cream 1pt",
+    "quantity": 1,
+    "rateOfSale": 6
+  },
+  {
+    "sku": "SKU-018",
+    "name": "Half & Half 1qt",
+    "quantity": 9,
+    "rateOfSale": 13
+  },
+  {
+    "sku": "SKU-020",
+    "name": "Whipped Cream Canister 14oz",
+    "quantity": 7,
+    "rateOfSale": 7
+  },
+  {
+    "sku": "SKU-021",
+    "name": "Sour Cream 16oz",
+    "quantity": 5,
+    "rateOfSale": 6
+  },
+  {
+    "sku": "SKU-022",
+    "name": "Light Sour Cream 16oz",
+    "quantity": 4,
+    "rateOfSale": 3
+  },
+  {
+    "sku": "SKU-026",
+    "name": "European-Style Butter 8oz",
+    "quantity": 3,
+    "rateOfSale": 3
+  },
+  {
+    "sku": "SKU-027",
+    "name": "Whipped Butter 8oz",
+    "quantity": 13,
+    "rateOfSale": 6
+  },
+  {
+    "sku": "SKU-028",
+    "name": "Grass-Fed Butter 8oz",
+    "quantity": 5,
+    "rateOfSale": 5
+  },
+  {
+    "sku": "SKU-029",
+    "name": "Clarified Ghee 13oz",
+    "quantity": 3,
+    "rateOfSale": 4
+  },
+  {
+    "sku": "SKU-030",
+    "name": "Greek Yogurt Plain 32oz",
+    "quantity": 4,
+    "rateOfSale": 7
+  },
+  {
+    "sku": "SKU-033",
+    "name": "Greek Yogurt Blueberry 5.3oz 4pk",
+    "quantity": 18,
+    "rateOfSale": 8
+  },
+  {
+    "sku": "SKU-034",
+    "name": "Regular Yogurt Plain 32oz",
+    "quantity": 3,
+    "rateOfSale": 4
+  },
+  {
+    "sku": "SKU-039",
+    "name": "Kids Yogurt Tubes 8pk",
+    "quantity": 14,
+    "rateOfSale": 13
+  },
+  {
+    "sku": "SKU-042",
+    "name": "Kefir Strawberry 32oz",
+    "quantity": 5,
+    "rateOfSale": 2
+  },
+  {
+    "sku": "SKU-043",
+    "name": "Cream Cheese Brick 8oz",
+    "quantity": 2,
+    "rateOfSale": 12
+  },
+  {
+    "sku": "SKU-046",
+    "name": "Cottage Cheese Lowfat 16oz",
+    "quantity": 3,
+    "rateOfSale": 7
+  },
+  {
+    "sku": "SKU-048",
+    "name": "Mascarpone 8oz",
+    "quantity": 2,
+    "rateOfSale": 5
+  },
+  {
+    "sku": "SKU-049",
+    "name": "Fresh Mozzarella Ball 8oz",
+    "quantity": 9,
+    "rateOfSale": 7
+  },
+  {
+    "sku": "SKU-051",
+    "name": "Feta Crumbles 6oz",
+    "quantity": 9,
+    "rateOfSale": 7
+  },
+  {
+    "sku": "SKU-052",
+    "name": "Goat Cheese Log 4oz",
+    "quantity": 11,
+    "rateOfSale": 5
+  },
+  {
+    "sku": "SKU-053",
+    "name": "Burrata 4oz 2pk",
+    "quantity": 7,
+    "rateOfSale": 2
+  },
+  {
+    "sku": "SKU-054",
+    "name": "Quark Soft Cheese 16oz",
+    "quantity": 3,
+    "rateOfSale": 1
+  },
+  {
+    "sku": "SKU-055",
+    "name": "Cheddar Block Mild 8oz",
+    "quantity": 2,
+    "rateOfSale": 11
+  },
+  {
+    "sku": "SKU-058",
+    "name": "Colby Jack Block 8oz",
+    "quantity": 20,
+    "rateOfSale": 4
+  },
+  {
+    "sku": "SKU-059",
+    "name": "Swiss Cheese Slices 8oz",
+    "quantity": 4,
+    "rateOfSale": 4
+  },
+  {
+    "sku": "SKU-060",
+    "name": "Provolone Slices 8oz",
+    "quantity": 3,
+    "rateOfSale": 5
+  },
+  {
+    "sku": "SKU-062",
+    "name": "Parmesan Grated 8oz",
+    "quantity": 2,
+    "rateOfSale": 9
+  },
+  {
+    "sku": "SKU-064",
+    "name": "Gouda Wheel Wedge 7oz",
+    "quantity": 2,
+    "rateOfSale": 5
+  },
+  {
+    "sku": "SKU-065",
+    "name": "Manchego Wedge 6oz",
+    "quantity": 9,
+    "rateOfSale": 3
+  },
+  {
+    "sku": "SKU-067",
+    "name": "Smoked Cheddar Block 8oz",
+    "quantity": 2,
+    "rateOfSale": 4
+  },
+  {
+    "sku": "SKU-068",
+    "name": "String Cheese Mozzarella 12pk",
+    "quantity": 4,
+    "rateOfSale": 14
+  },
+  {
+    "sku": "SKU-070",
+    "name": "American Cheese Singles 16ct",
+    "quantity": 9,
+    "rateOfSale": 11
+  },
+  {
+    "sku": "SKU-071",
+    "name": "Blue Cheese Crumbles 5oz",
+    "quantity": 1,
+    "rateOfSale": 4
+  },
+  {
+    "sku": "SKU-072",
+    "name": "Brie Wheel 8oz",
+    "quantity": 9,
+    "rateOfSale": 6
+  },
+  {
+    "sku": "SKU-073",
+    "name": "Camembert 8oz",
+    "quantity": 3,
+    "rateOfSale": 3
+  },
+  {
+    "sku": "SKU-076",
+    "name": "Ice Cream Cookie Dough 1.5qt",
+    "quantity": 5,
+    "rateOfSale": 7
+  },
+  {
+    "sku": "SKU-079",
+    "name": "Ice Cream Sandwiches 12ct",
+    "quantity": 9,
+    "rateOfSale": 6
+  },
+  {
+    "sku": "SKU-080",
+    "name": "Dairy Whipped Topping Frozen 8oz",
+    "quantity": 3,
+    "rateOfSale": 7
   }
 ]

@@ -1,41 +1,198 @@
 [
   {
     "sku": "SKU-003",
-    "name": "Free-Range Eggs (dozen)",
-    "quantityReceived": 24,
+    "name": "2% Reduced Fat Milk 1gal",
+    "quantity": 31,
     "expiration": "2026-08-20",
-    "receivedDate": "2026-07-22"
+    "storageRequirements": "Refrigerated 34–38°F"
   },
   {
-    "sku": "SKU-007",
-    "name": "Cheddar Block 8oz",
-    "quantityReceived": 20,
-    "expiration": "2026-10-01",
-    "receivedDate": "2026-07-22"
+    "sku": "SKU-017",
+    "name": "Light Cream 1pt",
+    "quantity": 25,
+    "expiration": "2027-01-01",
+    "storageRequirements": "Refrigerated 34–38°F"
   },
   {
-    "sku": "SKU-009",
-    "name": "Avocados Hass (each)",
-    "quantityReceived": 30,
-    "expiration": "2026-07-30",
-    "receivedDate": "2026-07-22"
+    "sku": "SKU-018",
+    "name": "Half & Half 1qt",
+    "quantity": 13,
+    "expiration": "2026-10-15",
+    "storageRequirements": "Refrigerated 34–38°F"
   },
   {
-    "sku": "SKU-010",
-    "name": "Chicken Breast Tray 2lb",
-    "quantityReceived": 16,
-    "expiration": "2026-07-28",
-    "receivedDate": "2026-07-22"
+    "sku": "SKU-019",
+    "name": "Half & Half Single-Serve 12ct",
+    "quantity": 48,
+    "expiration": "2026-12-01",
+    "storageRequirements": "Refrigerated 34–38°F"
   },
   {
-    "sku": "SKU-013",
-    "name": "Honeycrisp Apples (bag)",
-    "quantityReceived": 25,
-    "expiration": "2026-08-05",
-    "receivedDate": "2026-07-22",
-    "rateOfSale": 6,
-    "storageRequirements": "Refrigerated produce",
-    "reorderThreshold": 10,
-    "overstockThreshold": 40
+    "sku": "SKU-023",
+    "name": "Crème Fraîche 8oz",
+    "quantity": 19,
+    "expiration": "2026-10-10",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-026",
+    "name": "European-Style Butter 8oz",
+    "quantity": 18,
+    "expiration": "2026-09-21",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-028",
+    "name": "Grass-Fed Butter 8oz",
+    "quantity": 48,
+    "expiration": "2026-11-08",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-033",
+    "name": "Greek Yogurt Blueberry 5.3oz 4pk",
+    "quantity": 30,
+    "expiration": "2027-01-09",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-034",
+    "name": "Regular Yogurt Plain 32oz",
+    "quantity": 37,
+    "expiration": "2026-10-29",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-036",
+    "name": "Icelandic Skyr Plain 5.3oz",
+    "quantity": 16,
+    "expiration": "2026-12-20",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-038",
+    "name": "Drinkable Yogurt Strawberry 8oz",
+    "quantity": 19,
+    "expiration": "2026-08-25",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-039",
+    "name": "Kids Yogurt Tubes 8pk",
+    "quantity": 23,
+    "expiration": "2026-09-05",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-040",
+    "name": "Plant-Blend Yogurt Coconut 5.3oz",
+    "quantity": 34,
+    "expiration": "2026-11-11",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-045",
+    "name": "Cottage Cheese 4% 16oz",
+    "quantity": 41,
+    "expiration": "2026-12-08",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-047",
+    "name": "Ricotta Cheese Whole Milk 15oz",
+    "quantity": 36,
+    "expiration": "2026-09-05",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-049",
+    "name": "Fresh Mozzarella Ball 8oz",
+    "quantity": 41,
+    "expiration": "2026-09-16",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-050",
+    "name": "Mozzarella Ciliegine 8oz",
+    "quantity": 36,
+    "expiration": "2026-11-21",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-051",
+    "name": "Feta Crumbles 6oz",
+    "quantity": 36,
+    "expiration": "2027-01-13",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-052",
+    "name": "Goat Cheese Log 4oz",
+    "quantity": 46,
+    "expiration": "2026-11-10",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-056",
+    "name": "Cheddar Block Sharp 8oz",
+    "quantity": 12,
+    "expiration": "2026-08-31",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-057",
+    "name": "Cheddar Shredded Sharp 8oz",
+    "quantity": 7,
+    "expiration": "2026-10-07",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-058",
+    "name": "Colby Jack Block 8oz",
+    "quantity": 10,
+    "expiration": "2027-01-02",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-062",
+    "name": "Parmesan Grated 8oz",
+    "quantity": 47,
+    "expiration": "2026-12-29",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-063",
+    "name": "Pecorino Romano Wedge 6oz",
+    "quantity": 36,
+    "expiration": "2026-12-24",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-067",
+    "name": "Smoked Cheddar Block 8oz",
+    "quantity": 33,
+    "expiration": "2027-01-12",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-068",
+    "name": "String Cheese Mozzarella 12pk",
+    "quantity": 36,
+    "expiration": "2026-12-08",
+    "storageRequirements": "Refrigerated 34–38°F"
+  },
+  {
+    "sku": "SKU-074",
+    "name": "Ice Cream Vanilla 1.5qt",
+    "quantity": 45,
+    "expiration": "2026-08-20",
+    "storageRequirements": "Frozen 0°F or below"
+  },
+  {
+    "sku": "SKU-080",
+    "name": "Dairy Whipped Topping Frozen 8oz",
+    "quantity": 40,
+    "expiration": "2026-10-10",
+    "storageRequirements": "Frozen 0°F or below"
   }
 ]
