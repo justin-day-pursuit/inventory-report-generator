@@ -3,13 +3,20 @@
  * ROOT LAYOUT (app/layout.tsx)
  * ============================================================================
  * WHAT THIS FILE IS FOR:
- * Wraps every page with shared fonts, metadata (browser tab title), and global CSS.
- * You rarely need to edit this unless renaming the product or swapping fonts.
+ * Wraps every page with shared fonts, metadata (browser tab title), global CSS,
+ * and the light/dark ThemeProvider.
+ *
+ * HOW TO MAINTAIN:
+ * - The inline script below ThemeProvider reads localStorage BEFORE paint so users
+ *   do not see a flash of the wrong theme. If you rename THEME_STORAGE_KEY in
+ *   lib/theme.ts, update the string in that script too.
  * ============================================================================
  */
 
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Sora } from "next/font/google";
+import { ThemeProvider } from "@/components/ThemeProvider";
+import { DEFAULT_THEME, THEME_STORAGE_KEY } from "@/lib/theme";
 import "./globals.css";
 
 const sora = Sora({
@@ -38,23 +45,44 @@ export const metadata: Metadata = {
     "Monitor inventory, sync sales and incoming supplies, and generate stock reports.",
 };
 
+/** Tiny boot script: apply saved theme before React hydrates (avoids flash). */
+const themeBootScript = `
+(function () {
+  try {
+    var key = ${JSON.stringify(THEME_STORAGE_KEY)};
+    var stored = localStorage.getItem(key);
+    var theme = (stored === "light" || stored === "dark") ? stored : ${JSON.stringify(DEFAULT_THEME)};
+    document.documentElement.setAttribute("data-theme", theme);
+  } catch (e) {
+    document.documentElement.setAttribute("data-theme", ${JSON.stringify(DEFAULT_THEME)});
+  }
+})();
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${sora.variable} ${plexSans.variable} ${plexMono.variable}`}>
+    <html
+      lang="en"
+      data-theme={DEFAULT_THEME}
+      className={`${sora.variable} ${plexSans.variable} ${plexMono.variable}`}
+      suppressHydrationWarning
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+      </head>
       <body
         style={{
           fontFamily: "var(--font-plex-sans), var(--font-body)",
-          // Bridge next/font CSS variables into our globals.css tokens
           ["--font-display" as string]: "var(--font-sora), var(--font-display)",
           ["--font-body" as string]: "var(--font-plex-sans), var(--font-body)",
           ["--font-mono" as string]: "var(--font-plex-mono), var(--font-mono)",
         }}
       >
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );
