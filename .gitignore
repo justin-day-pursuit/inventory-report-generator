@@ -25,3 +25,6 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# accidental nested clones (do not commit a repo inside the repo)
+/inventory-report-generator/
