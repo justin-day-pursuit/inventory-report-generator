@@ -9,6 +9,7 @@ This is a Next.js 16 (App Router, Turbopack) + React 19 + TypeScript + Tailwind 
 - Build: `npm run build`. On the first build, Next rewrites `tsconfig.json` (sets `jsx` to `react-jsx` and adds `.next/dev/types/**/*.ts` to `include`); this is expected and already committed. TypeScript build errors are not ignored (`next.config.mjs`).
 - Core logic is framework-free in `lib/inventory.ts` (alerts, inventory updates from sales/supplies, report generation) and `lib/data-store.ts` (JSON file I/O). API routes under `app/api/*` and the UI in `app/page.tsx` call into them.
 - Mock JSON feeds (referenced by API routes):
-  - `data/inventory/inventory.json` — current stock (`sku`, `name`, `quantity`, `expiration`, `rateOfSale`, `storageRequirements`, `reorderThreshold`, `overstockThreshold`)
+  - `data/inventory/inventory.json` — current stock (`sku`, `name`, `quantity`, `expiration`, `rateOfSale`, `storageRequirements`, `reorderThreshold`, `overstockThreshold`); writable by inventory update
+  - `data/inventory/inventory.seed.json` — frozen testing copy of inventory; restore with `npm run restore:inventory`
   - `data/sales/sales.json` — sold products (`sku`, `name`, `quantity`, `rateOfSale`)
   - `data/incoming/incoming.json` — incoming supplies (`sku`, `name`, `quantity`, `expiration`, `storageRequirements`)

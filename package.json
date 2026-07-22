@@ -11,7 +11,8 @@
     "build": "next build",
     "start": "next start --hostname 0.0.0.0 --port 3000",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "restore:inventory": "node -e \"require('fs').copyFileSync('data/inventory/inventory.seed.json','data/inventory/inventory.json'); console.log('Restored inventory.json from inventory.seed.json');\""
   },
   "dependencies": {
     "next": "^16.2.11",
