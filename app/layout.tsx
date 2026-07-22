@@ -7,13 +7,16 @@
  * and the light/dark ThemeProvider.
  *
  * HOW TO MAINTAIN:
- * - The inline script below ThemeProvider reads localStorage BEFORE paint so users
- *   do not see a flash of the wrong theme. If you rename THEME_STORAGE_KEY in
+ * - The beforeInteractive Script reads localStorage BEFORE paint so users do not
+ *   see a flash of the wrong theme. If you rename THEME_STORAGE_KEY in
  *   lib/theme.ts, update the string in that script too.
+ * - Use next/script (not a raw <script> in JSX) to avoid the React 19 warning
+ *   about script tags inside components.
  * ============================================================================
  */
 
 import type { Metadata } from "next";
+import Script from "next/script";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Sora } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { DEFAULT_THEME, THEME_STORAGE_KEY } from "@/lib/theme";
@@ -71,9 +74,6 @@ export default function RootLayout({
       className={`${sora.variable} ${plexSans.variable} ${plexMono.variable}`}
       suppressHydrationWarning
     >
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
-      </head>
       <body
         style={{
           fontFamily: "var(--font-plex-sans), var(--font-body)",
@@ -82,6 +82,9 @@ export default function RootLayout({
           ["--font-mono" as string]: "var(--font-plex-mono), var(--font-mono)",
         }}
       >
+        <Script id="stockflow-theme-boot" strategy="beforeInteractive">
+          {themeBootScript}
+        </Script>
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

@@ -302,9 +302,13 @@ export default function Home() {
           {/* Sticky toolbar — does NOT scroll away with the table body */}
           <div className="inventory-toolbar">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <label className="relative block min-w-0 flex-1">
+              <label className="relative block min-w-0 flex-1" htmlFor="inventory-search">
                 <span className="sr-only">Search inventory</span>
                 <input
+                  id="inventory-search"
+                  name="inventory-search"
+                  type="search"
+                  autoComplete="off"
                   value={search}
                   onChange={(e) => {
                     setSearch(e.target.value);
@@ -314,9 +318,11 @@ export default function Home() {
                   className="input-field w-full rounded-lg px-3 py-2.5 text-sm outline-none ring-[var(--accent)]/40 placeholder:text-[var(--muted)] focus:ring-2"
                 />
               </label>
-              <label className="flex items-center gap-2 text-sm text-[var(--muted)]">
+              <label className="flex items-center gap-2 text-sm text-[var(--muted)]" htmlFor="inventory-status-filter">
                 <span className="whitespace-nowrap">Filter</span>
                 <select
+                  id="inventory-status-filter"
+                  name="inventory-status-filter"
                   value={statusFilter}
                   onChange={(e) => {
                     setStatusFilter(e.target.value as "all" | StockStatus);

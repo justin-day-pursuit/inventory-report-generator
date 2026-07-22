@@ -3,16 +3,12 @@
  * THEME PROVIDER (components/ThemeProvider.tsx)
  * ============================================================================
  * WHAT THIS FILE IS FOR:
- * Wraps the app so every page can read and change light/dark mode. It writes
- * data-theme on <html>, which drives the CSS variables in globals.css.
+ * Wraps the app so every page can read and change light/dark mode. Uses
+ * useSyncExternalStore so SSR and hydration agree (fixes the toggle mismatch).
  *
  * HOW TO MAINTAIN:
  * - Keep DEFAULT_THEME as "dark" unless product asks to flip the default.
- * - ThemeToggle is the only UI control users need — do not remove this provider
- *   from app/layout.tsx or the toggle will stop working.
- * - The inline script in app/layout.tsx sets data-theme before React loads;
- *   this provider reads that attribute on first client render (no flash, no
- *   extra setState-in-effect).
+ * - Do not remove this provider from app/layout.tsx.
  * ============================================================================
  */
 
@@ -23,13 +19,14 @@ import {
   useCallback,
   useContext,
   useMemo,
-  useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import {
-  DEFAULT_THEME,
-  THEME_STORAGE_KEY,
-  isThemeMode,
+  getServerThemeSnapshot,
+  getThemeSnapshot,
+  setThemeStore,
+  subscribeTheme,
   type ThemeMode,
 } from "@/lib/theme";
 
@@ -41,33 +38,22 @@ type ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-function applyTheme(theme: ThemeMode) {
-  document.documentElement.setAttribute("data-theme", theme);
-}
-
-/** Read theme already applied by the layout boot script (client only). */
-function readInitialTheme(): ThemeMode {
-  if (typeof document === "undefined") return DEFAULT_THEME;
-  const attr = document.documentElement.getAttribute("data-theme");
-  return isThemeMode(attr) ? attr : DEFAULT_THEME;
-}
-
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeMode>(readInitialTheme);
+  // getServerSnapshot keeps the first client pass identical to SSR (dark).
+  // After hydration, getThemeSnapshot picks up the boot-script / localStorage value.
+  const theme = useSyncExternalStore(
+    subscribeTheme,
+    getThemeSnapshot,
+    getServerThemeSnapshot
+  );
 
   const setTheme = useCallback((next: ThemeMode) => {
-    setThemeState(next);
-    applyTheme(next);
-    try {
-      window.localStorage.setItem(THEME_STORAGE_KEY, next);
-    } catch {
-      // Preference just won't persist across reloads.
-    }
+    setThemeStore(next);
   }, []);
 
   const toggleTheme = useCallback(() => {
-    setTheme(theme === "dark" ? "light" : "dark");
-  }, [setTheme, theme]);
+    setThemeStore(theme === "dark" ? "light" : "dark");
+  }, [theme]);
 
   const value = useMemo(
     () => ({ theme, setTheme, toggleTheme }),
