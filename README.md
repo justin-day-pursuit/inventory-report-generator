@@ -9,14 +9,56 @@ Inventory monitoring tool for coordinators: view current stock, load sales and i
 - Tailwind CSS v4 + custom CSS in `app/globals.css`
 - ESLint (flat config via `eslint-config-next`)
 
-## Getting started
+## Prerequisites (local machine)
+
+- **Node.js 20.9+** (20 LTS or newer; see `.nvmrc`)
+- **npm 10+** (comes with current Node installers)
+
+Check versions:
+
+```bash
+node -v
+npm -v
+```
+
+If you use `nvm`:
+
+```bash
+nvm install
+nvm use
+```
+
+## Getting started (working local URL)
+
+From the project root (the folder that contains `package.json`):
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open http://localhost:3000.
+Then open:
+
+**http://localhost:3000**
+
+That is the Stockflow monitoring UI. Leave the terminal open while you use the app.
+
+### Production-style local run
+
+```bash
+npm run build
+npm start
+```
+
+Same URL: **http://localhost:3000**
+
+### If port 3000 is already in use
+
+```bash
+npx next dev --hostname 0.0.0.0 --port 3001
+```
+
+Then open http://localhost:3001.
 
 ## How to use the page
 
@@ -40,10 +82,11 @@ Edit these JSON arrays to change demo data. An empty array `[]` is valid and sho
 
 ## Scripts
 
-- `npm run dev` — development server (http://localhost:3000)
-- `npm run build` — production build
-- `npm run start` — run the production build
+- `npm run dev` — development server at http://localhost:3000
+- `npm run build` — production build (also type-checks)
+- `npm start` — run the production build at http://localhost:3000
 - `npm run lint` — ESLint
+- `npm run typecheck` — TypeScript only (`tsc --noEmit`)
 
 ## Project layout
 
