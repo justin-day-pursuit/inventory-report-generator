@@ -17,6 +17,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import type { SalesItem } from "@/lib/inventory";
 
 export default function CheckSalesPage() {
@@ -48,13 +49,16 @@ export default function CheckSalesPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-10">
-      <header className="mb-6">
-        <p className="text-sm uppercase tracking-[0.18em] text-[var(--muted)]">Stockflow check</p>
-        <h1 className="font-display mt-1 text-3xl font-semibold tracking-tight">Sales data</h1>
-        <p className="mt-2 text-[var(--muted)]">
-          Read-only view of <code className="font-mono text-sm">data/sales/sales.json</code>
-          {loadedAt ? ` · loaded ${new Date(loadedAt).toLocaleString()}` : ""}
-        </p>
+      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm uppercase tracking-[0.18em] text-[var(--muted)]">Stockflow check</p>
+          <h1 className="font-display mt-1 text-3xl font-semibold tracking-tight">Sales data</h1>
+          <p className="mt-2 text-[var(--muted)]">
+            Read-only view of <code className="font-mono text-sm">data/sales/sales.json</code>
+            {loadedAt ? ` · loaded ${new Date(loadedAt).toLocaleString()}` : ""}
+          </p>
+        </div>
+        <ThemeToggle />
       </header>
 
       {error && (
@@ -69,7 +73,7 @@ export default function CheckSalesPage() {
         </div>
         <div className="inventory-scroll">
           <table className="w-full border-collapse text-sm">
-            <thead className="sticky top-0 bg-[#10201b] text-left text-[var(--muted)]">
+            <thead className="table-head sticky top-0 text-left text-[var(--muted)]">
               <tr>
                 <th className="px-4 py-3 font-medium">SKU</th>
                 <th className="px-4 py-3 font-medium">Name</th>
@@ -86,7 +90,7 @@ export default function CheckSalesPage() {
                 </tr>
               ) : (
                 items.map((row, idx) => (
-                  <tr key={`${row.sku}-${idx}`} className="border-t border-white/5">
+                  <tr key={`${row.sku}-${idx}`} className="row-divider">
                     <td className="font-mono px-4 py-3 text-[var(--muted)]">{row.sku}</td>
                     <td className="px-4 py-3">{row.name}</td>
                     <td className="px-4 py-3 text-right">{row.quantity}</td>

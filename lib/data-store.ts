@@ -7,13 +7,19 @@
  * API integrations. Every "Load" button on the webpage eventually reaches here.
  *
  * FOLDER MAP (do not rename without updating the paths below):
- *   data/inventory/inventory.json  → current warehouse stock
- *   data/sales/sales.json          → sold products from sales
- *   data/incoming/incoming.json    → deliveries from receiving / suppliers
+ *   data/inventory/inventory.json       → current warehouse stock (writable by Update)
+ *   data/inventory/inventory.seed.json  → frozen copy for testing — restore after demos
+ *   data/sales/sales.json               → sold products from sales
+ *   data/incoming/incoming.json         → deliveries from receiving / suppliers
  *
  * HOW TO MAINTAIN:
  * - To change mock numbers for a demo, edit the JSON files directly in a text
  *   editor. Keep valid JSON (commas between items, double quotes on names).
+ * - After "Update current inventory" changes inventory.json, reset test data with:
+ *     npm run restore:inventory
+ *   That copies inventory.seed.json back onto inventory.json.
+ * - When you intentionally change the baseline catalog, update BOTH inventory.json
+ *   and inventory.seed.json (or restore then re-seed from the new inventory.json).
  * - When real APIs are ready, keep these file paths as a fallback OR replace the
  *   read functions with HTTP calls to sales/warehouse systems.
  * - Empty arrays [] are valid — the UI will simply show "no rows".
@@ -32,6 +38,8 @@ export const DATA_PATHS = {
   salesDir: path.join(DATA_ROOT, "sales"),
   incomingDir: path.join(DATA_ROOT, "incoming"),
   inventoryFile: path.join(DATA_ROOT, "inventory", "inventory.json"),
+  /** Frozen baseline used by `npm run restore:inventory` for repeatable testing. */
+  inventorySeedFile: path.join(DATA_ROOT, "inventory", "inventory.seed.json"),
   salesFile: path.join(DATA_ROOT, "sales", "sales.json"),
   incomingFile: path.join(DATA_ROOT, "incoming", "incoming.json"),
 } as const;

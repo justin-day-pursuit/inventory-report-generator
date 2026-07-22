@@ -8,9 +8,16 @@
  * available too (@import "tailwindcss"), but the custom classes below keep the
  * monitoring layout consistent.
  *
+ * THEMES:
+ * - Dark mode (default) = the original Stockflow look — data-theme="dark"
+ * - Light mode = brighter surfaces for easier reading — data-theme="light"
+ * Toggle lives in the header (ThemeToggle). Preference is saved in localStorage
+ * under the key "stockflow-theme".
+ *
  * HOW TO MAINTAIN:
- * - Brand colors live in :root as CSS variables — change those first if the
- *   warehouse team wants a different palette.
+ * - Brand colors live as CSS variables under :root / [data-theme="…"].
+ *   Change those first if the warehouse team wants a different palette.
+ * - Prefer var(--…) over hard-coded hex in components so both themes stay in sync.
  * - Avoid deleting .inventory-* classes; the main page depends on them for the
  *   sticky search bar + scrollable list behavior.
  * ============================================================================
@@ -18,23 +25,77 @@
 
 @import "tailwindcss";
 
-:root {
-  /* Brand / atmosphere — cool slate-teal warehouse console (not purple, not cream) */
+/* -------------------------------------------------------------------------- */
+/* DARK MODE (default / current theme)                                        */
+/* -------------------------------------------------------------------------- */
+
+:root,
+html[data-theme="dark"] {
+  color-scheme: dark;
+  /* Cool slate-teal warehouse console (not purple, not cream) */
   --background: #0e1714;
   --background-mid: #13241f;
+  --background-deep: #0b1210;
   --foreground: #e8f0ec;
   --muted: #9bb0a6;
   --panel: rgba(18, 36, 31, 0.82);
   --panel-border: rgba(150, 190, 170, 0.18);
+  --surface: rgba(0, 0, 0, 0.22);
+  --surface-soft: rgba(255, 255, 255, 0.05);
+  --input-bg: #0b1613;
+  --table-head: #10201b;
+  --row-border: rgba(255, 255, 255, 0.05);
+  --control-border: rgba(255, 255, 255, 0.15);
+  --hover-fill: rgba(255, 255, 255, 0.05);
   --accent: #2f9e7b;
   --accent-strong: #1f7a5c;
+  --accent-contrast: #04140f;
   --warn: #d4a017;
   --danger: #d4544a;
   --info: #3d8fd1;
   --over: #c47a3a;
+  --glow-a: rgba(47, 158, 123, 0.22);
+  --glow-b: rgba(61, 143, 209, 0.12);
+  --grid-line: rgba(232, 240, 236, 0.03);
+  --grid-opacity: 0.35;
+  --toolbar-bg: rgba(12, 24, 20, 0.94);
   --font-display: "Sora", "Avenir Next", "Segoe UI", sans-serif;
   --font-body: "IBM Plex Sans", "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+/* -------------------------------------------------------------------------- */
+/* LIGHT MODE — brighter reading surfaces, same teal brand accents            */
+/* -------------------------------------------------------------------------- */
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --background: #eef4f1;
+  --background-mid: #e2ebe6;
+  --background-deep: #d5e0da;
+  --foreground: #14221c;
+  --muted: #5a6f65;
+  --panel: rgba(255, 255, 255, 0.88);
+  --panel-border: rgba(30, 70, 55, 0.14);
+  --surface: rgba(255, 255, 255, 0.72);
+  --surface-soft: rgba(20, 50, 40, 0.04);
+  --input-bg: #ffffff;
+  --table-head: #e7efea;
+  --row-border: rgba(20, 40, 32, 0.08);
+  --control-border: rgba(20, 40, 32, 0.16);
+  --hover-fill: rgba(20, 50, 40, 0.06);
+  --accent: #1f7a5c;
+  --accent-strong: #17634a;
+  --accent-contrast: #ffffff;
+  --warn: #b8860b;
+  --danger: #c23b32;
+  --info: #2a6fad;
+  --over: #a86428;
+  --glow-a: rgba(31, 122, 92, 0.14);
+  --glow-b: rgba(42, 111, 173, 0.1);
+  --grid-line: rgba(20, 40, 32, 0.045);
+  --grid-opacity: 0.55;
+  --toolbar-bg: rgba(255, 255, 255, 0.94);
 }
 
 html,
@@ -48,11 +109,12 @@ body {
   font-family: var(--font-body);
   /* Soft radial glow + faint grid so the page is not a flat single color */
   background:
-    radial-gradient(1200px 600px at 12% -10%, rgba(47, 158, 123, 0.22), transparent 55%),
-    radial-gradient(900px 500px at 90% 0%, rgba(61, 143, 209, 0.12), transparent 50%),
-    linear-gradient(165deg, var(--background) 0%, var(--background-mid) 55%, #0b1210 100%);
+    radial-gradient(1200px 600px at 12% -10%, var(--glow-a), transparent 55%),
+    radial-gradient(900px 500px at 90% 0%, var(--glow-b), transparent 50%),
+    linear-gradient(165deg, var(--background) 0%, var(--background-mid) 55%, var(--background-deep) 100%);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  transition: background 0.25s ease, color 0.25s ease;
 }
 
 body::before {
@@ -60,10 +122,10 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.35;
+  opacity: var(--grid-opacity);
   background-image:
-    linear-gradient(rgba(232, 240, 236, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(232, 240, 236, 0.03) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 48px 48px;
   mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
   z-index: 0;
@@ -107,7 +169,7 @@ body > * {
   z-index: 2;
   padding: 1rem 1.1rem;
   border-bottom: 1px solid var(--panel-border);
-  background: rgba(12, 24, 20, 0.94);
+  background: var(--toolbar-bg);
 }
 
 .inventory-scroll {
@@ -124,7 +186,64 @@ body > * {
   gap: 0.75rem;
   padding: 0.75rem 1.1rem;
   border-top: 1px solid var(--panel-border);
-  background: rgba(12, 24, 20, 0.94);
+  background: var(--toolbar-bg);
+}
+
+.table-head {
+  background: var(--table-head);
+}
+
+.row-divider {
+  border-top: 1px solid var(--row-border);
+}
+
+.surface-card {
+  border: 1px solid var(--panel-border);
+  background: var(--surface);
+}
+
+.control-border {
+  border: 1px solid var(--control-border);
+}
+
+.input-field {
+  border: 1px solid var(--panel-border);
+  background: var(--input-bg);
+  color: var(--foreground);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Theme toggle                                                               */
+/* -------------------------------------------------------------------------- */
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--control-border);
+  background: var(--surface);
+  color: var(--foreground);
+  border-radius: 999px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+
+.theme-toggle:hover {
+  background: var(--hover-fill);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.theme-toggle-icon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -177,7 +296,9 @@ body > * {
   .anim-rise-delay-1,
   .anim-rise-delay-2,
   .anim-rise-delay-3,
-  .alert-pulse {
+  .alert-pulse,
+  body {
     animation: none;
+    transition: none;
   }
 }

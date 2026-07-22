@@ -74,11 +74,18 @@ Then open http://localhost:3001.
 
 | Folder | File | Used by |
 | --- | --- | --- |
-| `data/inventory/` | `inventory.json` | `GET /api/inventory`, update + report |
+| `data/inventory/` | `inventory.json` | `GET /api/inventory`, update + report (writable) |
+| `data/inventory/` | `inventory.seed.json` | Frozen testing copy — restore with `npm run restore:inventory` |
 | `data/sales/` | `sales.json` | `GET /api/sales` |
 | `data/incoming/` | `incoming.json` | `GET /api/incoming` |
 
 Edit these JSON arrays to change demo data. An empty array `[]` is valid and shows an empty list. When real department APIs exist, replace the readers in `lib/data-store.ts` while keeping the same shapes.
+
+After clicking **Update current inventory**, stock numbers in `inventory.json` change. Reset to the saved testing baseline anytime:
+
+```bash
+npm run restore:inventory
+```
 
 ## Scripts
 
@@ -87,6 +94,7 @@ Edit these JSON arrays to change demo data. An empty array `[]` is valid and sho
 - `npm start` — run the production build at http://localhost:3000
 - `npm run lint` — ESLint
 - `npm run typecheck` — TypeScript only (`tsc --noEmit`)
+- `npm run restore:inventory` — copy `inventory.seed.json` back to `inventory.json` for repeatable testing
 
 ## Project layout
 
