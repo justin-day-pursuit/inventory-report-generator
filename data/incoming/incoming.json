@@ -1,0 +1,41 @@
+[
+  {
+    "sku": "SKU-003",
+    "name": "Free-Range Eggs (dozen)",
+    "quantityReceived": 24,
+    "expiration": "2026-08-20",
+    "receivedDate": "2026-07-22"
+  },
+  {
+    "sku": "SKU-007",
+    "name": "Cheddar Block 8oz",
+    "quantityReceived": 20,
+    "expiration": "2026-10-01",
+    "receivedDate": "2026-07-22"
+  },
+  {
+    "sku": "SKU-009",
+    "name": "Avocados Hass (each)",
+    "quantityReceived": 30,
+    "expiration": "2026-07-30",
+    "receivedDate": "2026-07-22"
+  },
+  {
+    "sku": "SKU-010",
+    "name": "Chicken Breast Tray 2lb",
+    "quantityReceived": 16,
+    "expiration": "2026-07-28",
+    "receivedDate": "2026-07-22"
+  },
+  {
+    "sku": "SKU-013",
+    "name": "Honeycrisp Apples (bag)",
+    "quantityReceived": 25,
+    "expiration": "2026-08-05",
+    "receivedDate": "2026-07-22",
+    "rateOfSale": 6,
+    "storageRequirements": "Refrigerated produce",
+    "reorderThreshold": 10,
+    "overstockThreshold": 40
+  }
+]

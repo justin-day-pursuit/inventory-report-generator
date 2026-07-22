@@ -1,8 +1,40 @@
+/**
+ * ============================================================================
+ * GLOBAL STYLES (app/globals.css)
+ * ============================================================================
+ * WHAT THIS FILE IS FOR:
+ * Shared look-and-feel for the inventory monitoring tool: colors, fonts,
+ * background atmosphere, and reusable layout helpers. Tailwind utilities are
+ * available too (@import "tailwindcss"), but the custom classes below keep the
+ * monitoring layout consistent.
+ *
+ * HOW TO MAINTAIN:
+ * - Brand colors live in :root as CSS variables — change those first if the
+ *   warehouse team wants a different palette.
+ * - Avoid deleting .inventory-* classes; the main page depends on them for the
+ *   sticky search bar + scrollable list behavior.
+ * ============================================================================
+ */
+
 @import "tailwindcss";
 
 :root {
-  --background: #0b1020;
-  --foreground: #e6e9f0;
+  /* Brand / atmosphere — cool slate-teal warehouse console (not purple, not cream) */
+  --background: #0e1714;
+  --background-mid: #13241f;
+  --foreground: #e8f0ec;
+  --muted: #9bb0a6;
+  --panel: rgba(18, 36, 31, 0.82);
+  --panel-border: rgba(150, 190, 170, 0.18);
+  --accent: #2f9e7b;
+  --accent-strong: #1f7a5c;
+  --warn: #d4a017;
+  --danger: #d4544a;
+  --info: #3d8fd1;
+  --over: #c47a3a;
+  --font-display: "Sora", "Avenir Next", "Segoe UI", sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
 html,
@@ -13,7 +45,139 @@ body {
 
 body {
   color: var(--foreground);
-  background: linear-gradient(160deg, #0b1020 0%, #131a33 100%);
+  font-family: var(--font-body);
+  /* Soft radial glow + faint grid so the page is not a flat single color */
+  background:
+    radial-gradient(1200px 600px at 12% -10%, rgba(47, 158, 123, 0.22), transparent 55%),
+    radial-gradient(900px 500px at 90% 0%, rgba(61, 143, 209, 0.12), transparent 50%),
+    linear-gradient(165deg, var(--background) 0%, var(--background-mid) 55%, #0b1210 100%);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image:
+    linear-gradient(rgba(232, 240, 236, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(232, 240, 236, 0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+  z-index: 0;
+}
+
+/* Make page content sit above the decorative grid */
+#__next,
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Inventory list container — own scroll + sticky toolbar                     */
+/* -------------------------------------------------------------------------- */
+
+.inventory-shell {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  backdrop-filter: blur(10px);
+  border-radius: 18px;
+  overflow: hidden;
+  min-height: 420px;
+  max-height: min(62vh, 640px);
+}
+
+.inventory-toolbar {
+  flex: 0 0 auto;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid var(--panel-border);
+  background: rgba(12, 24, 20, 0.94);
+}
+
+.inventory-scroll {
+  flex: 1 1 auto;
+  overflow: auto;
+  min-height: 0;
+}
+
+.inventory-pager {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1.1rem;
+  border-top: 1px solid var(--panel-border);
+  background: rgba(12, 24, 20, 0.94);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Motion — subtle presence, not noise                                        */
+/* -------------------------------------------------------------------------- */
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(212, 84, 74, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(212, 84, 74, 0.08);
+  }
+}
+
+.anim-rise {
+  animation: rise-in 0.55s ease-out both;
+}
+
+.anim-rise-delay-1 {
+  animation-delay: 0.08s;
+}
+
+.anim-rise-delay-2 {
+  animation-delay: 0.16s;
+}
+
+.anim-rise-delay-3 {
+  animation-delay: 0.24s;
+}
+
+.alert-pulse {
+  animation: pulse-soft 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-rise,
+  .anim-rise-delay-1,
+  .anim-rise-delay-2,
+  .anim-rise-delay-3,
+  .alert-pulse {
+    animation: none;
+  }
 }

@@ -1,26 +1,53 @@
+/**
+ * ============================================================================
+ * API: POST /api/report  (also accepts GET for convenience)
+ * ============================================================================
+ * WHAT THIS ENDPOINT IS FOR:
+ * Builds a curated inventory status report from the current inventory JSON
+ * (and optional items posted in the request body). Powers "Generate report".
+ *
+ * HOW TO MAINTAIN:
+ * - Report wording / recommendations are created in lib/inventory.ts
+ *   → generateStockReport(). Edit that file to change manager-facing language.
+ * - Future AI cross-checks should plug into generateStockReport() so this route
+ *   can stay a thin wrapper.
+ * ============================================================================
+ */
+
 import { NextResponse } from "next/server";
-import { generateStockReport, parseInventoryCsv, type InventoryItem } from "@/lib/inventory";
+import { readInventory } from "@/lib/data-store";
+import { generateStockReport, type InventoryItem } from "@/lib/inventory";
+
+async function buildReport(itemsOverride?: InventoryItem[]) {
+  const items = itemsOverride ?? (await readInventory());
+  return generateStockReport(items);
+}
+
+export async function GET() {
+  try {
+    const report = await buildReport();
+    return NextResponse.json(report);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to generate report.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
+    let items: InventoryItem[] | undefined;
 
-    let items: InventoryItem[];
-    if (typeof body?.csv === "string") {
-      items = parseInventoryCsv(body.csv);
-    } else if (Array.isArray(body?.items)) {
+    if (Array.isArray(body?.items)) {
       items = body.items as InventoryItem[];
-    } else {
-      return NextResponse.json(
-        { error: "Request must include either `csv` (string) or `items` (array)." },
-        { status: 400 }
-      );
     }
 
-    const report = generateStockReport(items);
+    const report = await buildReport(items);
     return NextResponse.json(report);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to generate report.";
+    const message =
+      error instanceof Error ? error.message : "Failed to generate report.";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

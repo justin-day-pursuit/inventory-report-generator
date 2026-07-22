@@ -1,0 +1,122 @@
+[
+  {
+    "sku": "SKU-001",
+    "name": "Organic Whole Milk 1gal",
+    "quantity": 48,
+    "expiration": "2026-07-28",
+    "rateOfSale": 12,
+    "storageRequirements": "Refrigerated 34–38°F",
+    "reorderThreshold": 20,
+    "overstockThreshold": 80
+  },
+  {
+    "sku": "SKU-002",
+    "name": "Sourdough Loaf",
+    "quantity": 14,
+    "expiration": "2026-07-24",
+    "rateOfSale": 8,
+    "storageRequirements": "Ambient dry shelf",
+    "reorderThreshold": 15,
+    "overstockThreshold": 40
+  },
+  {
+    "sku": "SKU-003",
+    "name": "Free-Range Eggs (dozen)",
+    "quantity": 6,
+    "expiration": "2026-08-05",
+    "rateOfSale": 10,
+    "storageRequirements": "Refrigerated 34–38°F",
+    "reorderThreshold": 12,
+    "overstockThreshold": 48
+  },
+  {
+    "sku": "SKU-004",
+    "name": "Greek Yogurt Plain 32oz",
+    "quantity": 32,
+    "expiration": "2026-08-12",
+    "rateOfSale": 5,
+    "storageRequirements": "Refrigerated 34–38°F",
+    "reorderThreshold": 10,
+    "overstockThreshold": 40
+  },
+  {
+    "sku": "SKU-005",
+    "name": "Baby Spinach 10oz",
+    "quantity": 22,
+    "expiration": "2026-07-23",
+    "rateOfSale": 7,
+    "storageRequirements": "Refrigerated, high humidity",
+    "reorderThreshold": 8,
+    "overstockThreshold": 30
+  },
+  {
+    "sku": "SKU-006",
+    "name": "Frozen Berries 2lb",
+    "quantity": 95,
+    "expiration": "2026-12-01",
+    "rateOfSale": 3,
+    "storageRequirements": "Frozen 0°F or below",
+    "reorderThreshold": 15,
+    "overstockThreshold": 60
+  },
+  {
+    "sku": "SKU-007",
+    "name": "Cheddar Block 8oz",
+    "quantity": 0,
+    "expiration": "2026-09-15",
+    "rateOfSale": 4,
+    "storageRequirements": "Refrigerated 34–38°F",
+    "reorderThreshold": 10,
+    "overstockThreshold": 36
+  },
+  {
+    "sku": "SKU-008",
+    "name": "Sparkling Water 12pk",
+    "quantity": 110,
+    "expiration": "2027-01-01",
+    "rateOfSale": 6,
+    "storageRequirements": "Ambient dry shelf",
+    "reorderThreshold": 24,
+    "overstockThreshold": 96
+  },
+  {
+    "sku": "SKU-009",
+    "name": "Avocados Hass (each)",
+    "quantity": 18,
+    "expiration": "2026-07-25",
+    "rateOfSale": 15,
+    "storageRequirements": "Ambient, then refrigerate when ripe",
+    "reorderThreshold": 20,
+    "overstockThreshold": 50
+  },
+  {
+    "sku": "SKU-010",
+    "name": "Chicken Breast Tray 2lb",
+    "quantity": 11,
+    "expiration": "2026-07-24",
+    "rateOfSale": 9,
+    "storageRequirements": "Refrigerated meat case",
+    "reorderThreshold": 12,
+    "overstockThreshold": 28
+  },
+  {
+    "sku": "SKU-011",
+    "name": "Olive Oil Extra Virgin 500ml",
+    "quantity": 40,
+    "expiration": "2027-06-30",
+    "rateOfSale": 2,
+    "storageRequirements": "Ambient, away from light",
+    "reorderThreshold": 8,
+    "overstockThreshold": 48
+  },
+  {
+    "sku": "SKU-012",
+    "name": "Tomato Basil Pasta Sauce",
+    "quantity": 55,
+    "expiration": "2027-03-01",
+    "rateOfSale": 4,
+    "storageRequirements": "Ambient dry shelf",
+    "reorderThreshold": 16,
+    "overstockThreshold": 64
+  }
+]
