@@ -1,103 +1,122 @@
-# inventory-report-generator (Stockflow)
+# Stockflow (inventory-report-generator)
 
-Inventory monitoring tool for coordinators: view current stock, load sales and incoming supply feeds, update on-hand quantities, and generate a curated restock report.
+Inventory monitoring for coordinators: view current stock, load sales and incoming supply feeds, update on-hand quantities, and generate a curated restock report.
 
 ## Tech stack
 
 - Next.js 16 (App Router, Turbopack) + React 19
 - TypeScript
 - Tailwind CSS v4 + custom CSS in `app/globals.css`
-- ESLint (flat config via `eslint-config-next`)
+- JSON file feeds under `data/` (stand-in for future department APIs)
 
-## Prerequisites (local machine)
+## Prerequisites
 
-- **Node.js 20.9+** (20 LTS or newer; see `.nvmrc`)
-- **npm 10+** (comes with current Node installers)
-
-Check versions:
+- **Node.js 20.9+** (see `.nvmrc`)
+- **npm 10+**
 
 ```bash
 node -v
 npm -v
 ```
 
-If you use `nvm`:
-
-```bash
-nvm install
-nvm use
-```
-
-## Getting started (working local URL)
-
-From the project root (the folder that contains `package.json`):
+## Local development
 
 ```bash
 npm install
 npm run dev
 ```
 
-Then open:
-
-**http://localhost:3000**
-
-That is the Stockflow monitoring UI. Leave the terminal open while you use the app.
-
-### Production-style local run
+Open **http://localhost:3000**
 
 ```bash
 npm run build
 npm start
 ```
 
-Same URL: **http://localhost:3000**
+Health check: **http://localhost:3000/api/health**
 
-### If port 3000 is already in use
+### Reset inventory baseline
+
+After Update demos change live stock:
 
 ```bash
-npx next dev --hostname 0.0.0.0 --port 3001
+npm run restore:inventory
 ```
 
-Then open http://localhost:3001.
+## Production deployment
 
-## How to use the page
+### Option A — Node host (`npm start`)
 
-1. **Alert cards** at the top summarize out-of-stock, understocked, overstocked, expiring, and expired items.
-2. **Current inventory** lists SKU, Name, Quantity, Expiration, Rate of Sale, and Storage Requirements. Search and filters stay fixed while the table scrolls; use Previous/Next for pages.
-3. **Department data sync**
-   - **Load sales data** / **Load incoming supplies** — API calls that read the JSON mock feeds.
-   - **Check sales data** / **Check incoming supplies** — open a new tab with a list view of that feed.
-   - **Update current inventory** — adds incoming quantities and subtracts sales, then saves inventory.
-4. **Generate report** — builds a curated status report with recommendations.
+```bash
+npm ci
+npm run build
+npm start
+```
 
-## Mock data folders (API sources)
+`npm start` boots the standalone Node server (see `scripts/start-production.cjs`). Serve behind a reverse proxy (nginx/Caddy) with HTTPS. Keep the `data/` directory on persistent disk so inventory writes survive restarts.
 
-| Folder | File | Used by |
-| --- | --- | --- |
-| `data/inventory/` | `inventory.json` | `GET /api/inventory`, update + report |
-| `data/sales/` | `sales.json` | `GET /api/sales` |
-| `data/incoming/` | `incoming.json` | `GET /api/incoming` |
+### Option B — Docker (recommended for VMs)
 
-Edit these JSON arrays to change demo data. An empty array `[]` is valid and shows an empty list. When real department APIs exist, replace the readers in `lib/data-store.ts` while keeping the same shapes.
+```bash
+npm run docker:build
+npm run docker:run
+```
+
+Or:
+
+```bash
+docker build -t stockflow .
+docker run --rm -p 3000:3000 -v stockflow-data:/app/data stockflow
+```
+
+- App: http://localhost:3000
+- Health: http://localhost:3000/api/health
+- Persist `/app/data` with a volume — inventory updates write to `inventory.json`
+
+### Important deployment notes
+
+1. **Persistence:** `POST /api/inventory/update` writes `data/inventory/inventory.json`. Use a durable volume (Docker/VM). Pure ephemeral serverless filesystems will lose writes.
+2. **Auth:** Routes are currently open. Put the service on a private network or add authentication before exposing to the public internet.
+3. **Seed vs live data:** `inventory.seed.json` is the reset baseline; `inventory.json` is the live working copy.
+4. **Config:** Copy `.env.example` → `.env.local` for local overrides (do not commit secrets).
 
 ## Scripts
 
-- `npm run dev` — development server at http://localhost:3000
-- `npm run build` — production build (also type-checks)
-- `npm start` — run the production build at http://localhost:3000
-- `npm run lint` — ESLint
-- `npm run typecheck` — TypeScript only (`tsc --noEmit`)
+| Script | Purpose |
+| --- | --- |
+| `npm run dev` | Development server at http://localhost:3000 |
+| `npm run build` | Production build (`output: "standalone"`) |
+| `npm start` | Run production build |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | TypeScript check |
+| `npm run ci` | lint + typecheck + build |
+| `npm run restore:inventory` | Reset live inventory from seed |
+| `npm run docker:build` / `docker:run` | Container image helpers |
+
+## How to use the page
+
+1. **Alert cards** summarize out-of-stock, understocked, overstocked, expiring, and expired items.
+2. **Current inventory** lists SKU, Name, Quantity, Expiration, Rate of Sale, and Storage Requirements (search/filter stay fixed; table scrolls; pagination below).
+3. **Department data sync** — Load / Check sales & incoming, then Update inventory.
+4. **Theme toggle** — Light or dark mode (saved in the browser).
+5. **Generate report** — Curated status report with recommendations.
+
+## Data layout
+
+| Path | Role |
+| --- | --- |
+| `data/inventory/inventory.json` | Live stock (writable) |
+| `data/inventory/inventory.seed.json` | Baseline for resets |
+| `data/sales/sales.json` | Sales feed |
+| `data/incoming/incoming.json` | Incoming supplies feed |
 
 ## Project layout
 
 - `app/page.tsx` — main monitoring UI
-- `app/check/sales/page.tsx` — sales check tab
-- `app/check/incoming/page.tsx` — incoming supplies check tab
-- `app/api/inventory/` — load inventory
-- `app/api/inventory/update/` — apply sales + supplies
-- `app/api/sales/` — load sales JSON
-- `app/api/incoming/` — load incoming JSON
-- `app/api/report/` — curated report
+- `app/check/*` — sales / incoming check tabs
+- `app/api/*` — inventory, sales, incoming, update, report, health
 - `lib/inventory.ts` — alerts, updates, report logic
-- `lib/data-store.ts` — read/write JSON under `data/`
-- `data/**` — mock JSON feeds
+- `lib/data-store.ts` — JSON file I/O
+- `lib/validate.ts` — API body validation
+- `components/*` — theme provider / toggle
+- `Dockerfile` — production container

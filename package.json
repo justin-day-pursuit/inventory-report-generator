@@ -9,9 +9,13 @@
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0 --port 3000",
     "build": "next build",
-    "start": "next start --hostname 0.0.0.0 --port 3000",
+    "start": "node scripts/start-production.cjs",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "ci": "npm run lint && npm run typecheck && npm run build",
+    "restore:inventory": "node -e \"require('fs').copyFileSync('data/inventory/inventory.seed.json','data/inventory/inventory.json'); console.log('Restored inventory.json from inventory.seed.json');\"",
+    "docker:build": "docker build -t stockflow .",
+    "docker:run": "docker run --rm -p 3000:3000 -v stockflow-data:/app/data --name stockflow stockflow"
   },
   "dependencies": {
     "next": "^16.2.11",

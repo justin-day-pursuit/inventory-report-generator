@@ -3,8 +3,8 @@
  * API: GET /api/incoming
  * ============================================================================
  * WHAT THIS ENDPOINT IS FOR:
- * Loads incoming supply rows from data/incoming/incoming.json (mock stand-in
- * for the future warehousing / receiving API). Used by "Load incoming supplies".
+ * Loads incoming supply rows from data/incoming/incoming.json (receiving feed).
+ * Used by "Load incoming supplies".
  *
  * HOW TO MAINTAIN:
  * - Put receiving exports into data/incoming/incoming.json (array of objects).
@@ -15,6 +15,8 @@
 import { NextResponse } from "next/server";
 import { readIncoming } from "@/lib/data-store";
 
+
+export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const items = await readIncoming();

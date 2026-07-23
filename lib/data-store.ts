@@ -3,20 +3,19 @@
  * DATA FILE HELPERS (lib/data-store.ts)
  * ============================================================================
  * WHAT THIS FILE IS FOR:
- * Reads and writes the JSON mock data files that stand in for future department
+ * Reads and writes the JSON data files that currently stand in for department
  * API integrations. Every "Load" button on the webpage eventually reaches here.
  *
  * FOLDER MAP (do not rename without updating the paths below):
- *   data/inventory/inventory.json  → current warehouse stock
- *   data/sales/sales.json          → sold products from sales
- *   data/incoming/incoming.json    → deliveries from receiving / suppliers
+ *   data/inventory/inventory.json       → current warehouse stock (writable by Update)
+ *   data/inventory/inventory.seed.json  → baseline snapshot — restore with npm run restore:inventory
+ *   data/sales/sales.json               → sold products from sales
+ *   data/incoming/incoming.json         → deliveries from receiving / suppliers
  *
- * HOW TO MAINTAIN:
- * - To change mock numbers for a demo, edit the JSON files directly in a text
- *   editor. Keep valid JSON (commas between items, double quotes on names).
- * - When real APIs are ready, keep these file paths as a fallback OR replace the
- *   read functions with HTTP calls to sales/warehouse systems.
- * - Empty arrays [] are valid — the UI will simply show "no rows".
+ * DEPLOYMENT:
+ * - On Docker/VM hosts, mount a persistent volume at /app/data so inventory
+ *   updates survive redeploys (see Dockerfile / README).
+ * - Ephemeral serverless filesystems will lose writes; use an external DB/API then.
  * ============================================================================
  */
 
@@ -32,6 +31,7 @@ export const DATA_PATHS = {
   salesDir: path.join(DATA_ROOT, "sales"),
   incomingDir: path.join(DATA_ROOT, "incoming"),
   inventoryFile: path.join(DATA_ROOT, "inventory", "inventory.json"),
+  inventorySeedFile: path.join(DATA_ROOT, "inventory", "inventory.seed.json"),
   salesFile: path.join(DATA_ROOT, "sales", "sales.json"),
   incomingFile: path.join(DATA_ROOT, "incoming", "incoming.json"),
 } as const;

@@ -21,6 +21,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   classifyStatus,
   filterInventory,
@@ -217,17 +218,22 @@ export default function Home() {
   return (
     <main className="mx-auto max-w-6xl px-5 py-8 sm:py-12">
       {/* ---- Brand / page intro (one composition, brand-forward) ---- */}
-      <header className="anim-rise mb-8">
-        <p className="text-sm font-medium uppercase tracking-[0.22em] text-[var(--accent)]">
-          Warehouse ops
-        </p>
-        <h1 className="font-display mt-2 text-4xl font-semibold tracking-tight sm:text-5xl">
-          Stockflow
-        </h1>
-        <p className="mt-3 max-w-2xl text-[var(--muted)]">
-          Monitor live stock, pull sales and supply feeds, and generate an accurate
-          restock report without retyping department data by hand.
-        </p>
+      <header className="anim-rise mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-sm font-medium uppercase tracking-[0.22em] text-[var(--accent)]">
+            Warehouse ops
+          </p>
+          <h1 className="font-display mt-2 text-4xl font-semibold tracking-tight sm:text-5xl">
+            Stockflow
+          </h1>
+          <p className="mt-3 max-w-2xl text-[var(--muted)]">
+            Monitor live stock, pull sales and supply feeds, and generate an accurate
+            restock report without retyping department data by hand.
+          </p>
+        </div>
+        <div className="shrink-0 sm:pt-1">
+          <ThemeToggle />
+        </div>
       </header>
 
       {/* ---- Alert badges / summary cards ---- */}
@@ -258,7 +264,7 @@ export default function Home() {
           {alerts.slice(0, 8).map((alert) => (
             <span
               key={`${alert.kind}-${alert.sku}-${alert.message}`}
-              className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-[var(--muted)]"
+              className="rounded-md border border-[var(--panel-border)] bg-[var(--surface-soft)] px-2.5 py-1 text-xs text-[var(--muted)]"
               title={alert.message}
             >
               <strong className="text-[var(--foreground)]">{alert.sku}</strong> · {alert.kind.replaceAll("_", " ")}
@@ -286,7 +292,7 @@ export default function Home() {
           <button
             type="button"
             onClick={() => void refreshInventory()}
-            className="rounded-lg border border-white/15 px-3 py-2 text-sm text-[var(--muted)] transition hover:bg-white/5 hover:text-[var(--foreground)]"
+            className="rounded-lg border border-[var(--control-border)] px-3 py-2 text-sm text-[var(--muted)] transition hover:bg-[var(--hover-fill)] hover:text-[var(--foreground)]"
           >
             Refresh
           </button>
@@ -296,27 +302,33 @@ export default function Home() {
           {/* Sticky toolbar — does NOT scroll away with the table body */}
           <div className="inventory-toolbar">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <label className="relative block min-w-0 flex-1">
+              <label className="relative block min-w-0 flex-1" htmlFor="inventory-search">
                 <span className="sr-only">Search inventory</span>
                 <input
+                  id="inventory-search"
+                  name="inventory-search"
+                  type="search"
+                  autoComplete="off"
                   value={search}
                   onChange={(e) => {
                     setSearch(e.target.value);
                     setPage(1);
                   }}
                   placeholder="Search SKU, name, or storage…"
-                  className="w-full rounded-lg border border-white/10 bg-[#0b1613] px-3 py-2.5 text-sm outline-none ring-[var(--accent)]/40 placeholder:text-[var(--muted)] focus:ring-2"
+                  className="input-field w-full rounded-lg px-3 py-2.5 text-sm outline-none ring-[var(--accent)]/40 placeholder:text-[var(--muted)] focus:ring-2"
                 />
               </label>
-              <label className="flex items-center gap-2 text-sm text-[var(--muted)]">
+              <label className="flex items-center gap-2 text-sm text-[var(--muted)]" htmlFor="inventory-status-filter">
                 <span className="whitespace-nowrap">Filter</span>
                 <select
+                  id="inventory-status-filter"
+                  name="inventory-status-filter"
                   value={statusFilter}
                   onChange={(e) => {
                     setStatusFilter(e.target.value as "all" | StockStatus);
                     setPage(1);
                   }}
-                  className="rounded-lg border border-white/10 bg-[#0b1613] px-3 py-2.5 text-sm text-[var(--foreground)] outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
+                  className="input-field rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
                 >
                   <option value="all">All statuses</option>
                   <option value="healthy">Healthy</option>
@@ -333,7 +345,7 @@ export default function Home() {
           {/* Scrollable table body only */}
           <div className="inventory-scroll">
             <table className="w-full min-w-[720px] border-collapse text-sm">
-              <thead className="sticky top-0 bg-[#10201b] text-left text-[var(--muted)]">
+              <thead className="table-head sticky top-0 text-left text-[var(--muted)]">
                 <tr>
                   <th className="px-4 py-3 font-medium">SKU</th>
                   <th className="px-4 py-3 font-medium">Name</th>
@@ -356,7 +368,7 @@ export default function Home() {
                   pageRows.map((item) => {
                     const status = classifyStatus(item);
                     return (
-                      <tr key={item.sku} className="border-t border-white/5 hover:bg-white/[0.03]">
+                      <tr key={item.sku} className="row-divider hover:bg-[var(--hover-fill)]">
                         <td className="font-mono px-4 py-3 text-[var(--muted)]">{item.sku}</td>
                         <td className="px-4 py-3">
                           <div className="font-medium">{item.name}</div>
@@ -387,7 +399,7 @@ export default function Home() {
                 type="button"
                 disabled={safePage <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="rounded-md border border-white/15 px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-[var(--control-border)] px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Previous
               </button>
@@ -395,7 +407,7 @@ export default function Home() {
                 type="button"
                 disabled={safePage >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="rounded-md border border-white/15 px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-[var(--control-border)] px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Next
               </button>
@@ -411,13 +423,13 @@ export default function Home() {
       >
         <h2 className="font-display text-xl font-semibold">Department data sync</h2>
         <p className="mt-1 max-w-3xl text-sm text-[var(--muted)]">
-          Load mock API feeds from the sales and receiving folders, open a check tab to
+          Load department sales and receiving feeds, open a check tab to
           review rows, then update the displayed inventory (supplies added, sales subtracted).
         </p>
 
         <div className="mt-5 grid gap-4 lg:grid-cols-3">
           {/* Sales column */}
-          <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+          <div className="surface-card rounded-xl p-4">
             <h3 className="font-medium">Sales data</h3>
             <p className="mt-1 text-xs text-[var(--muted)]">
               Source: <code className="font-mono">data/sales/sales.json</code>
@@ -432,14 +444,14 @@ export default function Home() {
                 type="button"
                 onClick={() => void loadSales()}
                 disabled={loadingSales}
-                className="rounded-lg bg-[var(--accent)] px-3.5 py-2 text-sm font-medium text-[#04140f] transition hover:bg-[var(--accent-strong)] hover:text-white disabled:opacity-60"
+                className="rounded-lg bg-[var(--accent)] px-3.5 py-2 text-sm font-medium text-[var(--accent-contrast)] transition hover:bg-[var(--accent-strong)] disabled:opacity-60"
               >
                 {loadingSales ? "Loading…" : "Load sales data"}
               </button>
               <button
                 type="button"
                 onClick={checkSales}
-                className="rounded-lg border border-white/15 px-3.5 py-2 text-sm transition hover:bg-white/5"
+                className="rounded-lg border border-[var(--control-border)] px-3.5 py-2 text-sm transition hover:bg-[var(--hover-fill)]"
               >
                 Check sales data
               </button>
@@ -447,7 +459,7 @@ export default function Home() {
           </div>
 
           {/* Incoming column */}
-          <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+          <div className="surface-card rounded-xl p-4">
             <h3 className="font-medium">Incoming supplies</h3>
             <p className="mt-1 text-xs text-[var(--muted)]">
               Source: <code className="font-mono">data/incoming/incoming.json</code>
@@ -462,14 +474,14 @@ export default function Home() {
                 type="button"
                 onClick={() => void loadIncoming()}
                 disabled={loadingIncoming}
-                className="rounded-lg bg-[var(--accent)] px-3.5 py-2 text-sm font-medium text-[#04140f] transition hover:bg-[var(--accent-strong)] hover:text-white disabled:opacity-60"
+                className="rounded-lg bg-[var(--accent)] px-3.5 py-2 text-sm font-medium text-[var(--accent-contrast)] transition hover:bg-[var(--accent-strong)] disabled:opacity-60"
               >
                 {loadingIncoming ? "Loading…" : "Load incoming supplies"}
               </button>
               <button
                 type="button"
                 onClick={checkIncoming}
-                className="rounded-lg border border-white/15 px-3.5 py-2 text-sm transition hover:bg-white/5"
+                className="rounded-lg border border-[var(--control-border)] px-3.5 py-2 text-sm transition hover:bg-[var(--hover-fill)]"
               >
                 Check incoming supplies
               </button>
@@ -477,7 +489,7 @@ export default function Home() {
           </div>
 
           {/* Update column */}
-          <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+          <div className="surface-card rounded-xl p-4">
             <h3 className="font-medium">Update inventory</h3>
             <p className="mt-1 text-xs text-[var(--muted)]">
               Writes to <code className="font-mono">data/inventory/inventory.json</code>
@@ -491,7 +503,7 @@ export default function Home() {
                 type="button"
                 onClick={() => void updateInventory()}
                 disabled={updating}
-                className="rounded-lg bg-[var(--info)] px-3.5 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:opacity-60"
+                className="rounded-lg bg-[var(--info)] px-3.5 py-2 text-sm font-medium text-[var(--accent-contrast)] transition hover:brightness-110 disabled:opacity-60"
               >
                 {updating ? "Updating…" : "Update current inventory"}
               </button>
@@ -524,7 +536,7 @@ export default function Home() {
             type="button"
             onClick={() => void generateReport()}
             disabled={reporting || inventory.length === 0}
-            className="rounded-lg bg-[var(--accent-strong)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-lg bg-[var(--accent-strong)] px-5 py-2.5 text-sm font-semibold text-[var(--accent-contrast)] transition hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {reporting ? "Generating…" : "Generate report"}
           </button>
@@ -551,9 +563,9 @@ export default function Home() {
               <MiniStat label="Shelf risk" value={report.totals.expiringSoonCount + report.totals.expiredCount} />
             </div>
 
-            <div className="mt-5 overflow-x-auto rounded-xl border border-white/10">
+            <div className="mt-5 overflow-x-auto rounded-xl border border-[var(--panel-border)]">
               <table className="w-full min-w-[640px] border-collapse text-sm">
-                <thead className="bg-white/5 text-left text-[var(--muted)]">
+                <thead className="bg-[var(--surface-soft)] text-left text-[var(--muted)]">
                   <tr>
                     <th className="px-3 py-2 font-medium">SKU</th>
                     <th className="px-3 py-2 font-medium">Name</th>
@@ -564,7 +576,7 @@ export default function Home() {
                 </thead>
                 <tbody>
                   {report.lines.map((line) => (
-                    <tr key={line.sku} className="border-t border-white/5">
+                    <tr key={line.sku} className="row-divider">
                       <td className="font-mono px-3 py-2 text-[var(--muted)]">{line.sku}</td>
                       <td className="px-3 py-2">{line.name}</td>
                       <td className="px-3 py-2 text-right">{line.quantity}</td>
@@ -610,7 +622,7 @@ function AlertCard({
 
   return (
     <div
-      className={`rounded-xl border border-white/10 bg-black/25 px-4 py-3 ${pulse ? "alert-pulse" : ""}`}
+      className={`surface-card rounded-xl px-4 py-3 ${pulse ? "alert-pulse" : ""}`}
       style={{ borderColor: value > 0 ? `color-mix(in srgb, ${color} 45%, transparent)` : undefined }}
     >
       <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">{label}</p>
@@ -637,7 +649,7 @@ function StatusChip({ status }: { status: StockStatus }) {
 
 function MiniStat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+    <div className="surface-card rounded-lg px-3 py-2">
       <p className="text-[11px] uppercase tracking-[0.12em] text-[var(--muted)]">{label}</p>
       <p className="mt-1 text-lg font-semibold tabular-nums">{value.toLocaleString()}</p>
     </div>

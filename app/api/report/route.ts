@@ -1,22 +1,18 @@
 /**
  * ============================================================================
- * API: POST /api/report  (also accepts GET for convenience)
+ * API: POST /api/report  (also accepts GET)
  * ============================================================================
- * WHAT THIS ENDPOINT IS FOR:
- * Builds a curated inventory status report from the current inventory JSON
- * (and optional items posted in the request body). Powers "Generate report".
- *
- * HOW TO MAINTAIN:
- * - Report wording / recommendations are created in lib/inventory.ts
- *   → generateStockReport(). Edit that file to change manager-facing language.
- * - Future AI cross-checks should plug into generateStockReport() so this route
- *   can stay a thin wrapper.
+ * Builds a curated inventory status report from disk inventory, or from a
+ * validated `items` array in the POST body.
  * ============================================================================
  */
 
 import { NextResponse } from "next/server";
 import { readInventory } from "@/lib/data-store";
 import { generateStockReport, type InventoryItem } from "@/lib/inventory";
+import { parseInventoryItems } from "@/lib/validate";
+
+export const dynamic = "force-dynamic";
 
 async function buildReport(itemsOverride?: InventoryItem[]) {
   const items = itemsOverride ?? (await readInventory());
@@ -39,8 +35,8 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     let items: InventoryItem[] | undefined;
 
-    if (Array.isArray(body?.items)) {
-      items = body.items as InventoryItem[];
+    if (body?.items !== undefined) {
+      items = parseInventoryItems(body.items);
     }
 
     const report = await buildReport(items);
