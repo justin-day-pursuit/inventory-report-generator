@@ -3,8 +3,9 @@
  * THEME TOGGLE BUTTON (components/ThemeToggle.tsx)
  * ============================================================================
  * WHAT THIS FILE IS FOR:
- * Header control that switches between light mode and dark mode (the original
- * Stockflow theme). Click once to flip; the choice is remembered in the browser.
+ * Header control that switches between light mode (default) and dark mode
+ * (the original Stockflow console theme). Click once to flip; the choice is
+ * remembered in the browser.
  *
  * HOW TO MAINTAIN:
  * - Label text can be reworded, but keep aria-label clear for accessibility.

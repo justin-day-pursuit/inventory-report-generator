@@ -4,7 +4,7 @@
  * ============================================================================
  * WHAT THIS FILE IS FOR:
  * Light / dark mode constants and a tiny external store used by ThemeProvider.
- * Dark mode is the original Stockflow look. Light mode is the brighter theme.
+ * Light mode is the default. Dark mode is the original Stockflow console look.
  *
  * HOW TO MAINTAIN:
  * - Do not rename THEME_STORAGE_KEY without also updating the boot script in
@@ -19,8 +19,8 @@ export type ThemeMode = "light" | "dark";
 /** localStorage key used by the theme store and the layout boot script. */
 export const THEME_STORAGE_KEY = "stockflow-theme";
 
-/** Default theme = current Stockflow dark console look. */
-export const DEFAULT_THEME: ThemeMode = "dark";
+/** Default theme = light mode for easier reading on first load. */
+export const DEFAULT_THEME: ThemeMode = "light";
 
 export function isThemeMode(value: unknown): value is ThemeMode {
   return value === "light" || value === "dark";

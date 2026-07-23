@@ -7,7 +7,7 @@
  * useSyncExternalStore so SSR and hydration agree (fixes the toggle mismatch).
  *
  * HOW TO MAINTAIN:
- * - Keep DEFAULT_THEME as "dark" unless product asks to flip the default.
+ * - Keep DEFAULT_THEME as "light" unless product asks to flip the default.
  * - Do not remove this provider from app/layout.tsx.
  * ============================================================================
  */
