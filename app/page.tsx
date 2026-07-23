@@ -423,7 +423,7 @@ export default function Home() {
       >
         <h2 className="font-display text-xl font-semibold">Department data sync</h2>
         <p className="mt-1 max-w-3xl text-sm text-[var(--muted)]">
-          Load mock API feeds from the sales and receiving folders, open a check tab to
+          Load department sales and receiving feeds, open a check tab to
           review rows, then update the displayed inventory (supplies added, sales subtracted).
         </p>
 

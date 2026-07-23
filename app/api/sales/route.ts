@@ -3,8 +3,8 @@
  * API: GET /api/sales
  * ============================================================================
  * WHAT THIS ENDPOINT IS FOR:
- * Loads sold-product rows from data/sales/sales.json (mock stand-in for the
- * future sales-department API). Used by the "Load sales data" button.
+ * Loads sold-product rows from data/sales/sales.json (department sales feed).
+ * Used by the "Load sales data" button.
  *
  * HOW TO MAINTAIN:
  * - Put sales exports into data/sales/sales.json (array of objects).
@@ -14,6 +14,8 @@
 
 import { NextResponse } from "next/server";
 import { readSales } from "@/lib/data-store";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {

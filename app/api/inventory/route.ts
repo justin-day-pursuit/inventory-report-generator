@@ -16,6 +16,8 @@ import { NextResponse } from "next/server";
 import { readInventory } from "@/lib/data-store";
 import { buildAlerts, summarizeAlertCounts } from "@/lib/inventory";
 
+
+export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const items = await readInventory();

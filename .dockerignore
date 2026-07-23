@@ -1,0 +1,16 @@
+# Ignore files that bloat the Docker build context
+node_modules
+.next
+.git
+.gitignore
+*.md
+!README.md
+AGENTS.md
+.cursor
+.vscode
+.env*
+!.env.example
+npm-debug.log*
+Dockerfile
+.dockerignore
+inventory-report-generator

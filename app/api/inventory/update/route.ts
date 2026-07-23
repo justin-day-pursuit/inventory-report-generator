@@ -2,15 +2,8 @@
  * ============================================================================
  * API: POST /api/inventory/update
  * ============================================================================
- * WHAT THIS ENDPOINT IS FOR:
- * Takes the currently loaded sales + incoming supplies (or re-reads them from
- * disk), applies them to inventory, saves data/inventory/inventory.json, and
- * returns the new stock list. This powers the "Update current inventory" button.
- *
- * HOW TO MAINTAIN:
- * - Math rules live in lib/inventory.ts → applyInventoryUpdates().
- * - After a successful update, inventory.json on disk is overwritten — keep a
- *   backup copy of that file if you need to undo a bad demo run.
+ * Applies sales (−) and incoming supplies (+) to inventory, then saves
+ * data/inventory/inventory.json. Request bodies are validated before use.
  * ============================================================================
  */
 
@@ -20,23 +13,22 @@ import {
   applyInventoryUpdates,
   buildAlerts,
   summarizeAlertCounts,
-  type IncomingItem,
-  type SalesItem,
 } from "@/lib/inventory";
+import { parseIncomingItems, parseSalesItems } from "@/lib/validate";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
 
-    // Prefer payloads sent from the browser (already-loaded feeds). If missing,
-    // fall back to reading the JSON files so the button still works alone.
     const inventory = await readInventory();
-    const sales: SalesItem[] = Array.isArray(body?.sales)
-      ? (body.sales as SalesItem[])
-      : await readSales();
-    const incoming: IncomingItem[] = Array.isArray(body?.incoming)
-      ? (body.incoming as IncomingItem[])
-      : await readIncoming();
+    const sales =
+      body?.sales !== undefined ? parseSalesItems(body.sales) : await readSales();
+    const incoming =
+      body?.incoming !== undefined
+        ? parseIncomingItems(body.incoming)
+        : await readIncoming();
 
     const updated = applyInventoryUpdates(inventory, sales, incoming);
     await writeInventory(updated);

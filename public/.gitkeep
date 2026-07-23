@@ -1,0 +1,1 @@
+# Keep an empty public/ so Docker and Next standalone copies succeed.
