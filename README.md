@@ -98,7 +98,7 @@ docker run --rm -p 3000:3000 -v stockflow-data:/app/data stockflow
 1. **Alert cards** summarize out-of-stock, understocked, overstocked, expiring, and expired items.
 2. **Current inventory** lists SKU, Name, Quantity, Expiration, Rate of Sale, and Storage Requirements (search/filter stay fixed; table scrolls; pagination below).
 3. **Department data sync** — Load / Check sales & incoming, then Update inventory.
-4. **Theme toggle** — Light or dark mode (saved in the browser).
+4. **Theme toggle** — Defaults to light mode; switch to dark anytime (saved in the browser).
 5. **Generate report** — Curated status report with recommendations.
 
 ## Data layout
