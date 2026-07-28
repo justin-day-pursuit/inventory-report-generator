@@ -4,7 +4,7 @@
  * ============================================================================
  * Lightweight readiness check for load balancers and container orchestrators.
  * Does not mutate data. Returns 200 when the process can serve traffic and
- * can see the inventory data file.
+ * can see the inventory spreadsheet (data/inventory/inventory.csv).
  * ============================================================================
  */
 
