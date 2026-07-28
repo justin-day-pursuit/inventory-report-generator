@@ -6,8 +6,10 @@
  * data/inventory/inventory.csv and saves the file.
  *
  * IMPORTANT — this endpoint expects the feeds in the request body:
- *   { "sales": [{ productId, name, quantitySold }],
- *     "incoming": [{ productId, name, quantity, expirationDate, storageCondition }] }
+ *   { "sales": [{ name, quantitySold }],
+ *     "incoming": [{ name, quantity, expirationDate, storageCondition }] }
+ * `name` is the product name shown on the page — brand plus product, for example
+ * "Amul Milk" — which is what identifies a product in this app.
  * Both keys are optional; a missing key simply means "nothing to apply".
  * The feeds are NOT read from the CSV automatically, because the CSV already
  * contains the sold quantities — re-applying them would double-count sales.

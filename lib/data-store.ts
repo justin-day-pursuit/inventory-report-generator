@@ -12,20 +12,21 @@
  *   data/inventory/inventory.seed.csv  → untouched original dataset.
  *                                        Restore with: npm run restore:inventory
  *
- * ONE ROW PER PRODUCT (important):
+ * HOW PRODUCTS ARE IDENTIFIED (important):
  * The spreadsheet stores history — the same product appears on hundreds of lines,
- * one per batch, so the "Product ID" column repeats. The app shows a list of
- * UNIQUE products instead: the lines are grouped per product and only the newest
- * record of each product is displayed. See PRODUCT_KEY below for how "a product"
- * is defined, and buildProductId() for the unique id that is shown on the page.
- * Because only the newest line is used, every value on a row (brand, product name,
- * quantity, sold, storage condition, expiration date) comes from that same CSV
- * line — they always belong together.
+ * one per batch — and its "Product ID" column is not a unique identifier: the same
+ * id is shared by every brand of that product (id 1 covers Amul Milk, Sudha Milk,
+ * Raj Milk and Mother Dairy Milk). What IS unique in this file is BRAND + PRODUCT
+ * NAME, so that combined name is what identifies a product throughout the app.
+ *
+ * The lines are grouped by that name and only the newest record of each product is
+ * shown. Because a row comes from a single line, every value on it (brand, product
+ * name, quantity, sold, storage condition, expiration date) belongs together.
  *
  * COLUMN MAP (CSV column → field used in the app):
- *   Product ID                            → csvProductId (raw value from the file)
- *   Product ID + Brand                    → productId   (shown as "Product ID")
- *   Brand + Product Name                  → name        (shown as "Name")
+ *   Brand + Product Name                  → name (the unique product, shown as "Name")
+ *   Product ID                            → csvProductId — NOT an identifier; kept
+ *                                           only so saves preserve that column
  *   Quantity (liters/kg)                  → quantity
  *   Quantity Sold (liters/kg)             → quantitySold
  *   Quantity in Stock (liters/kg)         → quantityInStock (what is left on hand)
@@ -61,22 +62,6 @@ export const DATA_PATHS = {
 /** Where the page tells the user its numbers come from. */
 export const INVENTORY_SOURCE = "data/inventory/inventory.csv";
 
-/**
- * WHAT COUNTS AS ONE PRODUCT IN THE LIST.
- *
- * In this dataset every product id belongs to exactly one product name
- * (1 = Milk, 2 = Butter, … 10 = Ghee) but is sold by four different brands, and
- * each brand keeps its own stock. Two ways to group the file are supported:
- *
- * - "product_and_brand" (default): one row per brand of a product — 40 products,
- *   for example "1-Amul → Amul Milk" and "1-Sudha → Sudha Milk". Every brand keeps
- *   its own stock figures, and each id appears exactly once.
- * - "product": one row per product id straight from the file — 10 products, whose
- *   ids read simply 1 … 10. The brand shown is the one on that product's newest
- *   record, so the other brands of the same product are not listed.
- */
-export const PRODUCT_KEY: "product_and_brand" | "product" = "product_and_brand";
-
 /** Exact column headings used by the dataset. Change these if the export changes. */
 export const CSV_COLUMNS = {
   productId: "Product ID",
@@ -111,21 +96,6 @@ function buildDisplayName(brand: string, productName: string): string {
 }
 
 /**
- * Builds the unique product id shown in the first table column.
- *
- * With PRODUCT_KEY = "product_and_brand" the brand is added to the file's product
- * id, so "1" plus "Mother Dairy" becomes "1-Mother-Dairy". That keeps one id per
- * brand of a product, and the id still starts with the id used in the CSV.
- * With PRODUCT_KEY = "product" the id from the file is used unchanged.
- */
-export function buildProductId(csvProductId: string, brand: string): string {
-  const base = csvProductId.trim() || "unknown";
-  if (PRODUCT_KEY === "product") return base;
-  const brandPart = brand.trim().replaceAll(/\s+/g, "-");
-  return brandPart ? `${base}-${brandPart}` : base;
-}
-
-/**
  * Turns one CSV line into the tidy object the rest of the app uses.
  * `lineNumber` is 1 for the first data line (the line right after the header).
  */
@@ -136,16 +106,13 @@ function toInventoryItem(row: Record<string, string>, lineNumber: number): Inven
   const quantity = toNumber(row[CSV_COLUMNS.quantity]);
   const quantitySold = toNumber(row[CSV_COLUMNS.quantitySold]);
   const inStockCell = row[CSV_COLUMNS.quantityInStock];
-  const productId = buildProductId(csvProductId, brand);
 
   return {
-    // One product = one row in the list, so the product id is already unique.
-    rowId: productId,
     lineNumber,
-    productId,
     csvProductId,
     productName,
     brand,
+    // Brand + product name — this is what identifies the product everywhere.
     name: buildDisplayName(brand, productName),
     // Filled in when the lines are grouped per product (see readInventory).
     batchCount: 1,
@@ -196,33 +163,31 @@ function isNewerRecord(a: InventoryItem, b: InventoryItem): boolean {
  * Loads the list of UNIQUE products shown on the page.
  *
  * The spreadsheet holds history (hundreds of batch lines per product), so the
- * lines are grouped per product — see PRODUCT_KEY — and each product is
+ * lines are grouped by product name (brand + product) and each product is
  * represented by its newest record. `batchCount` says how many lines that product
- * has in the file. Products come back in product-id order, brand by brand.
+ * has in the file. Products come back in alphabetical order by name, which is the
+ * order shown in the Name column.
  */
 export async function readInventory(): Promise<InventoryItem[]> {
   const batches = await readInventoryBatches();
   const newestPerProduct = new Map<string, InventoryItem>();
 
   for (const batch of batches) {
-    const known = newestPerProduct.get(batch.productId);
+    // Upper/lower case differences between lines must not create two products.
+    const key = batch.name.toLowerCase();
+    const known = newestPerProduct.get(key);
     if (!known) {
-      newestPerProduct.set(batch.productId, { ...batch });
+      newestPerProduct.set(key, { ...batch });
       continue;
     }
     known.batchCount += 1;
     if (isNewerRecord(batch, known)) {
       // Keep the running batch count while switching to the newer record.
-      newestPerProduct.set(batch.productId, { ...batch, batchCount: known.batchCount });
+      newestPerProduct.set(key, { ...batch, batchCount: known.batchCount });
     }
   }
 
-  return Array.from(newestPerProduct.values()).sort(
-    (a, b) =>
-      (Number(a.csvProductId) || 0) - (Number(b.csvProductId) || 0) ||
-      a.csvProductId.localeCompare(b.csvProductId) ||
-      a.brand.localeCompare(b.brand)
-  );
+  return Array.from(newestPerProduct.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**
@@ -235,7 +200,6 @@ export async function readSales(): Promise<SalesItem[]> {
   return items
     .filter((item) => item.quantitySold > 0)
     .map((item) => ({
-      productId: item.productId,
       name: item.name,
       quantitySold: item.quantitySold,
     }));
@@ -248,7 +212,6 @@ export async function readSales(): Promise<SalesItem[]> {
 export async function readIncoming(): Promise<IncomingItem[]> {
   const items = await readInventory();
   return items.map((item) => ({
-    productId: item.productId,
     name: item.name,
     quantity: item.quantity,
     expirationDate: item.expirationDate,
@@ -280,12 +243,55 @@ function setTextCell(row: Record<string, string>, column: string, value: string)
 }
 
 /**
- * Copies the app's fields back onto a spreadsheet row, leaving other columns alone.
- * The "Product ID" cell gets the raw file value (csvProductId), never the combined
- * id shown on the page, so the spreadsheet keeps its original numbering.
+ * Works out how a brand-new product should be written into the spreadsheet.
+ *
+ * A delivery only carries the full name ("Nestle Milk"). The file keeps brand and
+ * product name in separate columns and numbers each product, so this looks for a
+ * product name the file already knows ("Milk") at the end of the new name and, when
+ * it finds one, splits the name and reuses that product's number. If nothing
+ * matches, the name is written as-is and the number is left for someone to fill in.
  */
-function writeItemIntoRow(row: Record<string, string>, item: InventoryItem): void {
-  setTextCell(row, CSV_COLUMNS.productId, item.csvProductId || item.productId);
+function describeNewProduct(
+  table: CsvTable,
+  fullName: string
+): { brand: string; productName: string; csvProductId: string } {
+  const name = fullName.trim();
+  const lowerName = name.toLowerCase();
+
+  for (const row of table.rows) {
+    const knownName = (row[CSV_COLUMNS.productName] ?? "").trim();
+    if (!knownName) continue;
+    const knownLower = knownName.toLowerCase();
+    if (lowerName === knownLower) {
+      return {
+        brand: "",
+        productName: knownName,
+        csvProductId: (row[CSV_COLUMNS.productId] ?? "").trim(),
+      };
+    }
+    if (lowerName.endsWith(` ${knownLower}`)) {
+      return {
+        brand: name.slice(0, name.length - knownName.length).trim(),
+        productName: knownName,
+        csvProductId: (row[CSV_COLUMNS.productId] ?? "").trim(),
+      };
+    }
+  }
+
+  return { brand: "", productName: name, csvProductId: "" };
+}
+
+/**
+ * Copies the app's fields back onto a spreadsheet row, leaving other columns alone.
+ * The "Product ID" cell keeps the file's own value; the app never identifies
+ * products by it (brand + product name does that), it only preserves the column.
+ */
+function writeItemIntoRow(
+  row: Record<string, string>,
+  item: InventoryItem,
+  csvProductId: string
+): void {
+  setTextCell(row, CSV_COLUMNS.productId, csvProductId);
   setTextCell(row, CSV_COLUMNS.productName, item.productName);
   setTextCell(row, CSV_COLUMNS.brand, item.brand);
   setNumberCell(row, CSV_COLUMNS.quantity, item.quantity);
@@ -315,15 +321,22 @@ export async function writeInventory(items: InventoryItem[]): Promise<void> {
   for (const item of items) {
     const existingRow = item.lineNumber > 0 ? table.rows[item.lineNumber - 1] : undefined;
     if (existingRow) {
-      writeItemIntoRow(existingRow, item);
-    } else {
-      const newRow: Record<string, string> = {};
-      header.forEach((column) => {
-        newRow[column] = "";
-      });
-      writeItemIntoRow(newRow, item);
-      table.rows.push(newRow);
+      writeItemIntoRow(existingRow, item, item.csvProductId);
+      continue;
     }
+    const newRow: Record<string, string> = {};
+    header.forEach((column) => {
+      newRow[column] = "";
+    });
+    // A brand-new product still has to fit the file's shape: brand and product
+    // name in their own columns, and the number the file uses for that product.
+    const placement = describeNewProduct(table, item.name);
+    writeItemIntoRow(
+      newRow,
+      { ...item, brand: placement.brand, productName: placement.productName },
+      item.csvProductId || placement.csvProductId
+    );
+    table.rows.push(newRow);
   }
 
   await fs.mkdir(DATA_PATHS.inventoryDir, { recursive: true });

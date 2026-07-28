@@ -4,7 +4,7 @@ Inventory monitoring for coordinators: browse a real dairy inventory dataset bat
 
 Data source: `data/inventory/inventory.csv` — the dairy dataset, one line per product batch, with brand, quantity, quantity sold, storage condition, expiration date, and restock thresholds.
 
-**Unique products:** the spreadsheet stores history, so the same `Product ID` appears on hundreds of lines. The app groups those lines into unique products — one per brand of a product (`1-Amul` = Amul Milk, `1-Sudha` = Sudha Milk, 40 in total) — and shows each product's newest record. Every value on a row therefore comes from one real CSV line. `PRODUCT_KEY` in `lib/data-store.ts` switches the grouping to plain product ids (`1` … `10`, 10 rows) if that is preferred.
+**Unique products:** the spreadsheet stores history, so a product appears on hundreds of lines. A product is identified by its **name — brand plus product name** ("Amul Milk"), which is unique in this dataset; the file's `Product ID` column is not, because every brand of a product shares the same id. The app groups the lines by name into 40 unique products and shows each product's newest record, so every value on a row comes from one real CSV line. The `Product ID` column is not displayed; it is preserved when the file is saved.
 
 ## Tech stack
 
@@ -100,7 +100,7 @@ docker run --rm -p 3000:3000 -v stockflow-data:/app/data stockflow
 ## How to use the page
 
 1. **Alert cards** summarize out-of-stock, understocked, overstocked, expiring, and expired items.
-2. **Current inventory** lists one row per unique product: Product ID, Name (Brand + Product Name), Quantity (liters/kg), Quantity Sold (liters/kg), Storage Conditions, Expiration Date, and Status. Hover a product id to see which dataset product it maps to and how many records it has. 50 rows show per page by default; the **Show** dropdown goes up to 500. Search/filter stay fixed; the table scrolls; pagination sits below.
+2. **Current inventory** lists one row per unique product: Name (Brand + Product Name), Quantity (liters/kg), Quantity Sold (liters/kg), Storage Conditions, Expiration Date, and Status. Hover a product name to see how many dataset records it has and when its newest one was written. 50 rows show per page by default; the **Show** dropdown goes up to 500. Search/filter stay fixed; the table scrolls; pagination sits below.
 3. **Department data sync** — currently paused: the Load / Check / Update buttons are visible but their click handlers are commented out (see `app/page.tsx`).
 4. **Theme toggle** — Defaults to light mode; switch to dark anytime (saved in the browser).
 5. **Generate report** — Curated status report with recommendations.

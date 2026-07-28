@@ -13,7 +13,7 @@
  *
  * HOW TO MAINTAIN:
  * - Column labels must stay aligned with the fields /api/sales returns:
- *   productId, name, quantitySold.
+ *   name (brand + product) and quantitySold.
  * - The dataset holds thousands of rows, so the API returns the first 500 by
  *   default. Use /api/sales?limit=all to fetch every row.
  * ============================================================================
@@ -84,7 +84,6 @@ export default function CheckSalesPage() {
           <table className="w-full border-collapse text-sm">
             <thead className="table-head sticky top-0 text-left text-[var(--muted)]">
               <tr>
-                <th className="px-4 py-3 font-medium">Product ID</th>
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="px-4 py-3 text-right font-medium">Quantity Sold (liters/kg)</th>
               </tr>
@@ -92,14 +91,13 @@ export default function CheckSalesPage() {
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-4 py-8 text-center text-[var(--muted)]">
+                  <td colSpan={2} className="px-4 py-8 text-center text-[var(--muted)]">
                     No sold quantities found in data/inventory/inventory.csv.
                   </td>
                 </tr>
               ) : (
-                items.map((row, idx) => (
-                  <tr key={`${row.productId}-${idx}`} className="row-divider">
-                    <td className="font-mono px-4 py-3 text-[var(--muted)]">{row.productId}</td>
+                items.map((row) => (
+                  <tr key={row.name} className="row-divider">
                     <td className="px-4 py-3">{row.name}</td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {row.quantitySold.toLocaleString(undefined, { maximumFractionDigits: 2 })}

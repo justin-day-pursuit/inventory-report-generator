@@ -7,9 +7,9 @@
  * the alert badge counts. The main page calls this when it first loads and whenever
  * you press Refresh.
  *
- * Each product appears once, with its product id, and carries the values from its
- * newest line in the spreadsheet. `sourceRecordCount` reports how many lines of
- * batch history those products were built from.
+ * Each product appears once — identified by its name, brand plus product — and
+ * carries the values from its newest line in the spreadsheet. `sourceRecordCount`
+ * reports how many lines of batch history those products were built from.
  *
  * HOW TO MAINTAIN:
  * - Do not hard-code products here. Edit data/inventory/inventory.csv instead.

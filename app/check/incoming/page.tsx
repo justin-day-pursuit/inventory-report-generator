@@ -13,7 +13,7 @@
  *
  * HOW TO MAINTAIN:
  * - Keep the columns in sync with the fields /api/incoming returns:
- *   productId, name, quantity, expirationDate, storageCondition.
+ *   name (brand + product), quantity, expirationDate, storageCondition.
  * - The API returns the first 500 rows by default; use ?limit=all for every row.
  * ============================================================================
  */
@@ -85,7 +85,6 @@ export default function CheckIncomingPage() {
           <table className="w-full border-collapse text-sm">
             <thead className="table-head sticky top-0 text-left text-[var(--muted)]">
               <tr>
-                <th className="px-4 py-3 font-medium">Product ID</th>
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="px-4 py-3 text-right font-medium">Quantity (liters/kg)</th>
                 <th className="px-4 py-3 font-medium">Storage Conditions</th>
@@ -95,14 +94,13 @@ export default function CheckIncomingPage() {
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-[var(--muted)]">
+                  <td colSpan={4} className="px-4 py-8 text-center text-[var(--muted)]">
                     No batches found in data/inventory/inventory.csv.
                   </td>
                 </tr>
               ) : (
-                items.map((row, idx) => (
-                  <tr key={`${row.productId}-${idx}`} className="row-divider">
-                    <td className="font-mono px-4 py-3 text-[var(--muted)]">{row.productId}</td>
+                items.map((row) => (
+                  <tr key={row.name} className="row-divider">
                     <td className="px-4 py-3">{row.name}</td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {row.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })}

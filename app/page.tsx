@@ -12,11 +12,13 @@
  * WHERE THE ROWS COME FROM:
  * data/inventory/inventory.csv, served by /api/inventory. The spreadsheet keeps a
  * line per batch, so it is grouped into unique products first: one row per product,
- * each with its own product id, showing that product's newest record. The table
+ * showing that product's newest record. The table
  * columns match the spreadsheet columns:
- *   Product ID · Name (Brand + Product Name) · Quantity (liters/kg) ·
+ *   Name (Brand + Product Name) · Quantity (liters/kg) ·
  *   Quantity Sold (liters/kg) · Storage Conditions · Expiration Date · Status
  * "Status" is worked out by the app (see classifyStatus in lib/inventory.ts).
+ * A product is identified by its name — brand plus product name — because the
+ * dataset's "Product ID" column is shared by every brand of a product.
  *
  * HOW TO MAINTAIN (non-technical):
  * - To change how many rows appear per page by default, edit DEFAULT_PAGE_SIZE
@@ -304,7 +306,7 @@ export default function Home() {
         <div className="anim-rise anim-rise-delay-1 mb-6 flex flex-wrap gap-2">
           {alerts.slice(0, 8).map((alert, index) => (
             <span
-              key={`${alert.kind}-${alert.productId}-${index}`}
+              key={`${alert.kind}-${alert.name}-${index}`}
               className="rounded-md border border-[var(--panel-border)] bg-[var(--surface-soft)] px-2.5 py-1 text-xs text-[var(--muted)]"
               title={`${alert.name}: ${alert.message}`}
             >
@@ -359,7 +361,7 @@ export default function Home() {
                     setSearch(e.target.value);
                     setPage(1);
                   }}
-                  placeholder="Search product id, name, or storage condition…"
+                  placeholder="Search brand, product name, or storage condition…"
                   className="input-field w-full rounded-lg px-3 py-2.5 text-sm outline-none ring-[var(--accent)]/40 placeholder:text-[var(--muted)] focus:ring-2"
                 />
               </label>
@@ -409,10 +411,9 @@ export default function Home() {
 
           {/* Scrollable table body only */}
           <div className="inventory-scroll">
-            <table className="w-full min-w-[860px] border-collapse text-sm">
+            <table className="w-full min-w-[760px] border-collapse text-sm">
               <thead className="table-head sticky top-0 text-left text-[var(--muted)]">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Product ID</th>
                   <th className="px-4 py-3 font-medium">Name</th>
                   <th className="px-4 py-3 text-right font-medium">Quantity (liters/kg)</th>
                   <th className="px-4 py-3 text-right font-medium">Quantity Sold (liters/kg)</th>
@@ -424,7 +425,7 @@ export default function Home() {
               <tbody>
                 {pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-[var(--muted)]">
+                    <td colSpan={6} className="px-4 py-10 text-center text-[var(--muted)]">
                       {loadingInventory
                         ? "Loading…"
                         : "No matching products. Clear the search/filter or add rows to data/inventory/inventory.csv."}
@@ -432,16 +433,17 @@ export default function Home() {
                   </tr>
                 ) : (
                   pageRows.map((item) => (
-                    <tr key={item.rowId} className="row-divider hover:bg-[var(--hover-fill)]">
+                    // Brand + product name identifies the product, so it is also
+                    // what React uses to tell the rows apart.
+                    <tr key={item.name} className="row-divider hover:bg-[var(--hover-fill)]">
                       <td
-                        className="font-mono px-4 py-3 text-[var(--muted)]"
-                        // Hovering explains where the id comes from and how much
-                        // history the dataset holds for this product.
-                        title={`Dataset product ${item.csvProductId} · ${item.brand || "no brand"} · newest of ${item.batchCount.toLocaleString()} record(s), dated ${item.recordDate}`}
+                        className="px-4 py-3 font-medium"
+                        // Hovering shows how much batch history the dataset holds
+                        // for this product and when its newest record was written.
+                        title={`Newest of ${item.batchCount.toLocaleString()} record(s) in the dataset, dated ${item.recordDate}`}
                       >
-                        {item.productId}
+                        {item.name}
                       </td>
-                      <td className="px-4 py-3 font-medium">{item.name}</td>
                       <td className="px-4 py-3 text-right tabular-nums">
                         {formatUnits(item.quantity)}
                       </td>
@@ -643,10 +645,9 @@ export default function Home() {
             </p>
 
             <div className="mt-2 overflow-x-auto rounded-xl border border-[var(--panel-border)]">
-              <table className="w-full min-w-[720px] border-collapse text-sm">
+              <table className="w-full min-w-[680px] border-collapse text-sm">
                 <thead className="bg-[var(--surface-soft)] text-left text-[var(--muted)]">
                   <tr>
-                    <th className="px-3 py-2 font-medium">Product ID</th>
                     <th className="px-3 py-2 font-medium">Name</th>
                     <th className="px-3 py-2 text-right font-medium">Quantity (liters/kg)</th>
                     <th className="px-3 py-2 text-right font-medium">Quantity Sold (liters/kg)</th>
@@ -657,8 +658,7 @@ export default function Home() {
                 </thead>
                 <tbody>
                   {report.lines.slice(0, REPORT_ROW_LIMIT).map((line) => (
-                    <tr key={line.rowId} className="row-divider">
-                      <td className="font-mono px-3 py-2 text-[var(--muted)]">{line.productId}</td>
+                    <tr key={line.name} className="row-divider">
                       <td className="px-3 py-2">{line.name}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {formatUnits(line.quantity)}

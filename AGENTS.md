@@ -11,7 +11,8 @@ This is a Next.js 16 (App Router, Turbopack) + React 19 + TypeScript + Tailwind 
 - Core logic: `lib/inventory.ts` (status/alerts/report), `lib/data-store.ts` (CSV I/O + column map), `lib/csv.ts` (CSV parse/serialize), `lib/validate.ts` (API validation).
 - Data files:
   - `data/inventory/inventory.csv` — live dairy dataset, one line per product batch (writable by update)
-  - Display is grouped into unique products (`PRODUCT_KEY` in `lib/data-store.ts`): one row per product id + brand, e.g. `1-Amul`, showing that product's newest record. `csvProductId` keeps the raw `Product ID` for writes.
+  - Products are identified by name (`Brand` + `Product Name`, e.g. "Amul Milk"), which is unique in this dataset; `Product ID` is shared by all brands of a product, is not displayed, and is only preserved on write via `csvProductId`.
+  - Display groups the batch lines into 40 unique products, each showing its newest record.
   - `data/inventory/inventory.seed.csv` — untouched original dataset; `npm run restore:inventory`
   - Columns used by the app: `Product ID`, `Product Name`, `Brand`, `Quantity (liters/kg)`, `Quantity Sold (liters/kg)`, `Quantity in Stock (liters/kg)`, `Storage Condition`, `Expiration Date`, `Date`, `Shelf Life (days)`, `Minimum Stock Threshold (liters/kg)`, `Reorder Quantity (liters/kg)`
   - `/api/sales` and `/api/incoming` are read-only views derived from that CSV (no separate feed files)

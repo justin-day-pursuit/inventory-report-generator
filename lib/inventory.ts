@@ -15,10 +15,17 @@
  * WHERE THE DATA COMES FROM:
  * data/inventory/inventory.csv — a real dairy dataset. The file stores history, one
  * line per batch, so the same product appears on hundreds of lines. lib/data-store.ts
- * groups those lines into UNIQUE products (one per brand of a product) and keeps the
- * newest record of each, which is what the list on the page shows.
+ * groups those lines into UNIQUE products and keeps the newest record of each, which
+ * is what the list on the page shows.
+ *
+ * HOW A PRODUCT IS IDENTIFIED:
+ * By its name — brand plus product name, for example "Amul Milk". That combination
+ * is unique in this dataset. The file's "Product ID" column is NOT used as an
+ * identifier: every brand of a product shares the same id (id 1 covers Amul Milk,
+ * Sudha Milk, Raj Milk and Mother Dairy Milk), so it cannot tell products apart.
+ *
  * The columns used by this app are:
- *   Product ID, Product Name, Brand, Quantity (liters/kg),
+ *   Product Name, Brand, Quantity (liters/kg),
  *   Quantity Sold (liters/kg), Quantity in Stock (liters/kg), Storage Condition,
  *   Expiration Date, Date, Shelf Life (days),
  *   Minimum Stock Threshold (liters/kg), Reorder Quantity (liters/kg)
@@ -82,26 +89,23 @@ export const SHELF_LIFE_REFERENCE: "record_date" | "today" = "record_date";
  * the brand, product name, quantities and dates always belong together.
  */
 export type InventoryItem = {
-  /**
-   * Unique key for this product — the same value as productId. Used by the web
-   * page to tell rows apart; it is not displayed separately.
-   */
-  rowId: string;
   /** Which data line of the CSV this product was read from (1 = first data line). */
   lineNumber: number;
   /**
-   * The unique product code shown in the first table column, for example
-   * "1-Amul" (product 1, brand Amul). Built by buildProductId in lib/data-store.ts
-   * and guaranteed to appear only once in the list.
+   * The raw CSV "Product ID" value, for example "1". Shared by every brand of the
+   * same product, so it never identifies a product — it is kept only so that
+   * saving the file preserves that column. It is not shown on the page.
    */
-  productId: string;
-  /** The raw CSV "Product ID" value, for example "1". Used when saving the file. */
   csvProductId: string;
   /** CSV "Product Name", for example "Milk". */
   productName: string;
   /** CSV "Brand", for example "Amul". */
   brand: string;
-  /** Display name shown in the Name column: brand followed by product name. */
+  /**
+   * Brand followed by product name, for example "Amul Milk".
+   * THIS IS THE UNIQUE IDENTIFIER of a product: it appears once in the list, and
+   * every other part of the app (alerts, feeds, updates) matches on it.
+   */
   name: string;
   /** How many lines this product has in the CSV (its batch history). */
   batchCount: number;
@@ -129,10 +133,9 @@ export type InventoryItem = {
  * One sales line from the sales department feed.
  * The feed shown by /api/sales is derived from the "Quantity Sold (liters/kg)"
  * column of the inventory CSV.
- * `productId` is the unique product code shown on the page (for example "1-Amul").
  */
 export type SalesItem = {
-  productId: string;
+  /** Brand + product name, for example "Amul Milk" — how the product is matched. */
   name: string;
   /** Units sold that should be taken out of stock. */
   quantitySold: number;
@@ -144,7 +147,7 @@ export type SalesItem = {
  * inventory CSV (quantity, expiration date, storage condition).
  */
 export type IncomingItem = {
-  productId: string;
+  /** Brand + product name, for example "Amul Milk" — how the product is matched. */
   name: string;
   /** Units received, which arrive as a brand-new batch. */
   quantity: number;
@@ -164,9 +167,7 @@ export type AlertKind =
 
 export type InventoryAlert = {
   kind: AlertKind;
-  /** Product code the alert belongs to (CSV "Product ID"). */
-  productId: string;
-  /** Brand + product name, so the alert reads well on its own. */
+  /** Brand + product name — identifies the product the alert belongs to. */
   name: string;
   message: string;
 };
@@ -322,14 +323,12 @@ export function buildAlerts(items: InventoryItem[], now: Date = new Date()): Inv
     if (days < 0) {
       alerts.push({
         kind: "expired",
-        productId: item.productId,
         name: item.name,
         message: `Expired ${Math.abs(days)} day(s) ago — remove or markdown.`,
       });
     } else if (days <= EXPIRING_SOON_DAYS) {
       alerts.push({
         kind: "expiring_soon",
-        productId: item.productId,
         name: item.name,
         message: `Expires in ${days} day(s) — prioritize sale or transfer.`,
       });
@@ -338,21 +337,18 @@ export function buildAlerts(items: InventoryItem[], now: Date = new Date()): Inv
     if (onHand <= 0) {
       alerts.push({
         kind: "out_of_stock",
-        productId: item.productId,
         name: item.name,
         message: "Sold out — lost sales risk until the next batch arrives.",
       });
     } else if (onHand <= minimum) {
       alerts.push({
         kind: "understocked",
-        productId: item.productId,
         name: item.name,
         message: `Only ${round1(onHand)} left (restock at ${round1(minimum)}).`,
       });
     } else if (onHand >= overstock) {
       alerts.push({
         kind: "overstocked",
-        productId: item.productId,
         name: item.name,
         message: `${round1(onHand)} still in stock, above the overstock limit of ${round1(overstock)}.`,
       });
@@ -388,8 +384,8 @@ export function summarizeAlertCounts(alerts: InventoryAlert[]) {
  *      a product that is not on the list yet becomes a new product row.
  *   2) Sales are then subtracted from what is on hand, never below zero.
  *
- * Feeds are matched on the unique product id, or on the product name when the id
- * is unknown, so a feed that only carries names still lines up.
+ * Feed rows are matched to products by name (brand + product), which is the unique
+ * identifier used everywhere in this app.
  *
  * MAINTENANCE: This function does not write files. The API route that calls it is
  * responsible for saving the result back to data/inventory/inventory.csv.
@@ -402,17 +398,15 @@ export function applyInventoryUpdates(
   // Work on copies so we never accidentally change the original list in memory.
   const products: InventoryItem[] = inventory.map((item) => ({ ...item }));
 
-  /** Finds the product a feed row is talking about, by id first, then by name. */
-  function findProduct(productId: string, name: string): InventoryItem | undefined {
-    return (
-      products.find((product) => product.productId === productId) ??
-      products.find((product) => product.name.toLowerCase() === name.trim().toLowerCase())
-    );
+  /** Finds the product a feed row is talking about, ignoring upper/lower case. */
+  function findProduct(name: string): InventoryItem | undefined {
+    const wanted = name.trim().toLowerCase();
+    return products.find((product) => product.name.toLowerCase() === wanted);
   }
 
   // --- Step 1: add incoming supplies ---
   for (const delivery of incoming) {
-    const product = findProduct(delivery.productId, delivery.name);
+    const product = findProduct(delivery.name);
     if (product) {
       product.quantity += delivery.quantity;
       product.quantityInStock = unitsOnHand(product) + delivery.quantity;
@@ -421,16 +415,13 @@ export function applyInventoryUpdates(
       continue;
     }
     products.push({
-      rowId: delivery.productId,
-      // 0 means "not in the file yet" — the save routine appends these lines.
+      // 0 means "not in the file yet" — the save routine appends these lines and
+      // fills in the file's Product ID column from the product name.
       lineNumber: 0,
-      productId: delivery.productId,
-      // Unique ids read "<product id from the file>-<brand>", so the part before
-      // the first dash is what belongs in the spreadsheet's Product ID column.
-      csvProductId: delivery.productId.split("-")[0],
-      productName: delivery.name || delivery.productId,
+      csvProductId: "",
+      productName: delivery.name,
       brand: "",
-      name: delivery.name || delivery.productId,
+      name: delivery.name,
       batchCount: 1,
       quantity: delivery.quantity,
       quantitySold: 0,
@@ -446,7 +437,7 @@ export function applyInventoryUpdates(
 
   // --- Step 2: subtract sales ---
   for (const sale of sales) {
-    const product = findProduct(sale.productId, sale.name);
+    const product = findProduct(sale.name);
     // A sale for stock we do not have on record is skipped on purpose, so
     // quantities never go negative.
     if (!product) continue;
@@ -560,7 +551,7 @@ function buildRecommendations(lines: StockLine[], alerts: InventoryAlert[]): str
   if (expired.length > 0) {
     tips.push(
       `Remove or markdown ${expired.length} expired product(s): ${listSample(
-        expired.map((l) => `${l.name} (product ${l.productId})`)
+        expired.map((l) => l.name)
       )}.`
     );
   }
@@ -591,7 +582,7 @@ function buildRecommendations(lines: StockLine[], alerts: InventoryAlert[]): str
   if (overstocked.length > 0) {
     tips.push(
       `Slow down orders for ${overstocked.length} overstocked product(s): ${listSample(
-        overstocked.map((l) => `${l.name} (product ${l.productId})`)
+        overstocked.map((l) => l.name)
       )}.`
     );
   }
@@ -608,7 +599,7 @@ function buildRecommendations(lines: StockLine[], alerts: InventoryAlert[]): str
   if (velocityRisk.length > 0) {
     tips.push(
       `Selling too slowly to clear before expiry — ${velocityRisk.length} product(s): ${listSample(
-        velocityRisk.map((l) => `${l.name} (product ${l.productId})`)
+        velocityRisk.map((l) => l.name)
       )}.`
     );
   }
@@ -629,7 +620,7 @@ function buildRecommendations(lines: StockLine[], alerts: InventoryAlert[]): str
 
 /**
  * Filters products for the search box and status filter on the main page.
- * Searches product id, name (brand + product), and storage condition.
+ * Searches the product name (brand + product) and the storage condition.
  * Safe to call on every keystroke — it does not change the source data.
  */
 export function filterInventory(
@@ -643,7 +634,6 @@ export function filterInventory(
     if (statusFilter !== "all" && classifyStatus(item, now) !== statusFilter) return false;
     if (!q) return true;
     return (
-      item.productId.toLowerCase().includes(q) ||
       item.name.toLowerCase().includes(q) ||
       item.storageCondition.toLowerCase().includes(q)
     );
