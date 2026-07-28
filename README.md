@@ -1,13 +1,15 @@
 # Stockflow (inventory-report-generator)
 
-Inventory monitoring for coordinators: view current stock, load sales and incoming supply feeds, update on-hand quantities, and generate a curated restock report.
+Inventory monitoring for coordinators: browse a real dairy inventory dataset batch by batch, see the stock status of every batch (sold out, understocked, overstocked, expiring soon, expired), and generate a curated restock report.
+
+Data source: `data/inventory/inventory.csv` — one line per product batch, with brand, quantity, quantity sold, storage condition, expiration date, and restock thresholds.
 
 ## Tech stack
 
 - Next.js 16 (App Router, Turbopack) + React 19
 - TypeScript
 - Tailwind CSS v4 + custom CSS in `app/globals.css`
-- JSON file feeds under `data/` (stand-in for future department APIs)
+- CSV dataset under `data/inventory/` (real dairy inventory export)
 
 ## Prerequisites
 
@@ -71,13 +73,13 @@ docker run --rm -p 3000:3000 -v stockflow-data:/app/data stockflow
 
 - App: http://localhost:3000
 - Health: http://localhost:3000/api/health
-- Persist `/app/data` with a volume — inventory updates write to `inventory.json`
+- Persist `/app/data` with a volume — inventory updates write to `inventory.csv`
 
 ### Important deployment notes
 
-1. **Persistence:** `POST /api/inventory/update` writes `data/inventory/inventory.json`. Use a durable volume (Docker/VM). Pure ephemeral serverless filesystems will lose writes.
+1. **Persistence:** `POST /api/inventory/update` writes `data/inventory/inventory.csv`. Use a durable volume (Docker/VM). Pure ephemeral serverless filesystems will lose writes.
 2. **Auth:** Routes are currently open. Put the service on a private network or add authentication before exposing to the public internet.
-3. **Seed vs live data:** `inventory.seed.json` is the reset baseline; `inventory.json` is the live working copy.
+3. **Seed vs live data:** `inventory.seed.csv` is the untouched original dataset; `inventory.csv` is the live working copy.
 4. **Config:** Copy `.env.example` → `.env.local` for local overrides (do not commit secrets).
 
 ## Scripts
@@ -96,8 +98,8 @@ docker run --rm -p 3000:3000 -v stockflow-data:/app/data stockflow
 ## How to use the page
 
 1. **Alert cards** summarize out-of-stock, understocked, overstocked, expiring, and expired items.
-2. **Current inventory** lists SKU, Name, Quantity, Expiration, Rate of Sale, and Storage Requirements (search/filter stay fixed; table scrolls; pagination below).
-3. **Department data sync** — Load / Check sales & incoming, then Update inventory.
+2. **Current inventory** lists Product ID, Name (Brand + Product Name), Quantity (liters/kg), Quantity Sold (liters/kg), Storage Conditions, Expiration Date, and Status. 50 rows show per page by default; the **Show** dropdown goes up to 500. Search/filter stay fixed; the table scrolls; pagination sits below.
+3. **Department data sync** — currently paused: the Load / Check / Update buttons are visible but their click handlers are commented out (see `app/page.tsx`).
 4. **Theme toggle** — Defaults to light mode; switch to dark anytime (saved in the browser).
 5. **Generate report** — Curated status report with recommendations.
 
@@ -105,10 +107,8 @@ docker run --rm -p 3000:3000 -v stockflow-data:/app/data stockflow
 
 | Path | Role |
 | --- | --- |
-| `data/inventory/inventory.json` | Live stock (writable) |
-| `data/inventory/inventory.seed.json` | Baseline for resets |
-| `data/sales/sales.json` | Sales feed |
-| `data/incoming/incoming.json` | Incoming supplies feed |
+| `data/inventory/inventory.csv` | Live stock — one line per dairy product batch (writable) |
+| `data/inventory/inventory.seed.csv` | Untouched original dataset, used by `npm run restore:inventory` |
 
 ## Project layout
 
@@ -116,7 +116,8 @@ docker run --rm -p 3000:3000 -v stockflow-data:/app/data stockflow
 - `app/check/*` — sales / incoming check tabs
 - `app/api/*` — inventory, sales, incoming, update, report, health
 - `lib/inventory.ts` — alerts, updates, report logic
-- `lib/data-store.ts` — JSON file I/O
+- `lib/csv.ts` — CSV reader / writer
+- `lib/data-store.ts` — CSV file I/O and the CSV-column → app-field map
 - `lib/validate.ts` — API body validation
 - `components/*` — theme provider / toggle
 - `Dockerfile` — production container

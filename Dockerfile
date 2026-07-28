@@ -34,7 +34,7 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Runtime JSON feeds (inventory is writable; seed is the reset baseline)
+# Runtime CSV dataset (inventory.csv is writable; inventory.seed.csv is the baseline)
 COPY --from=builder --chown=nextjs:nodejs /app/data ./data
 
 USER nextjs
