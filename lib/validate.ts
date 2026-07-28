@@ -79,9 +79,9 @@ export function parseIncomingItems(value: unknown): IncomingItem[] {
 }
 
 /**
- * Validates a posted list of inventory batches (used by POST /api/report when a
- * caller wants a report on its own snapshot instead of the saved file).
- * Optional numbers fall back to 0 so a short payload still works.
+ * Validates a posted list of products (used by POST /api/report when a caller
+ * wants a report on its own snapshot instead of the saved file).
+ * Optional fields fall back to sensible values so a short payload still works.
  */
 export function parseInventoryItems(value: unknown): InventoryItem[] {
   if (!Array.isArray(value)) {
@@ -101,12 +101,14 @@ export function parseInventoryItems(value: unknown): InventoryItem[] {
     const quantityInStock = asNumber(row.quantityInStock) ?? quantity - quantitySold;
 
     return {
-      rowId: asString(row.rowId) ?? `P${productId}-L${index + 1}`,
+      rowId: asString(row.rowId) ?? productId,
       lineNumber: asNumber(row.lineNumber) ?? 0,
       productId,
+      csvProductId: asString(row.csvProductId) ?? productId,
       productName: asString(row.productName) ?? name,
       brand: asString(row.brand) ?? "",
       name,
+      batchCount: asNumber(row.batchCount) ?? 1,
       quantity,
       quantitySold,
       quantityInStock,

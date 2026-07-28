@@ -12,8 +12,19 @@
  *   data/inventory/inventory.seed.csv  → untouched original dataset.
  *                                        Restore with: npm run restore:inventory
  *
+ * ONE ROW PER PRODUCT (important):
+ * The spreadsheet stores history — the same product appears on hundreds of lines,
+ * one per batch, so the "Product ID" column repeats. The app shows a list of
+ * UNIQUE products instead: the lines are grouped per product and only the newest
+ * record of each product is displayed. See PRODUCT_KEY below for how "a product"
+ * is defined, and buildProductId() for the unique id that is shown on the page.
+ * Because only the newest line is used, every value on a row (brand, product name,
+ * quantity, sold, storage condition, expiration date) comes from that same CSV
+ * line — they always belong together.
+ *
  * COLUMN MAP (CSV column → field used in the app):
- *   Product ID                            → productId   (shown as "Product ID")
+ *   Product ID                            → csvProductId (raw value from the file)
+ *   Product ID + Brand                    → productId   (shown as "Product ID")
  *   Brand + Product Name                  → name        (shown as "Name")
  *   Quantity (liters/kg)                  → quantity
  *   Quantity Sold (liters/kg)             → quantitySold
@@ -50,6 +61,22 @@ export const DATA_PATHS = {
 /** Where the page tells the user its numbers come from. */
 export const INVENTORY_SOURCE = "data/inventory/inventory.csv";
 
+/**
+ * WHAT COUNTS AS ONE PRODUCT IN THE LIST.
+ *
+ * In this dataset every product id belongs to exactly one product name
+ * (1 = Milk, 2 = Butter, … 10 = Ghee) but is sold by four different brands, and
+ * each brand keeps its own stock. Two ways to group the file are supported:
+ *
+ * - "product_and_brand" (default): one row per brand of a product — 40 products,
+ *   for example "1-Amul → Amul Milk" and "1-Sudha → Sudha Milk". Every brand keeps
+ *   its own stock figures, and each id appears exactly once.
+ * - "product": one row per product id straight from the file — 10 products, whose
+ *   ids read simply 1 … 10. The brand shown is the one on that product's newest
+ *   record, so the other brands of the same product are not listed.
+ */
+export const PRODUCT_KEY: "product_and_brand" | "product" = "product_and_brand";
+
 /** Exact column headings used by the dataset. Change these if the export changes. */
 export const CSV_COLUMNS = {
   productId: "Product ID",
@@ -84,25 +111,44 @@ function buildDisplayName(brand: string, productName: string): string {
 }
 
 /**
+ * Builds the unique product id shown in the first table column.
+ *
+ * With PRODUCT_KEY = "product_and_brand" the brand is added to the file's product
+ * id, so "1" plus "Mother Dairy" becomes "1-Mother-Dairy". That keeps one id per
+ * brand of a product, and the id still starts with the id used in the CSV.
+ * With PRODUCT_KEY = "product" the id from the file is used unchanged.
+ */
+export function buildProductId(csvProductId: string, brand: string): string {
+  const base = csvProductId.trim() || "unknown";
+  if (PRODUCT_KEY === "product") return base;
+  const brandPart = brand.trim().replaceAll(/\s+/g, "-");
+  return brandPart ? `${base}-${brandPart}` : base;
+}
+
+/**
  * Turns one CSV line into the tidy object the rest of the app uses.
  * `lineNumber` is 1 for the first data line (the line right after the header).
  */
 function toInventoryItem(row: Record<string, string>, lineNumber: number): InventoryItem {
-  const productId = (row[CSV_COLUMNS.productId] ?? "").trim();
+  const csvProductId = (row[CSV_COLUMNS.productId] ?? "").trim();
   const productName = (row[CSV_COLUMNS.productName] ?? "").trim();
   const brand = (row[CSV_COLUMNS.brand] ?? "").trim();
   const quantity = toNumber(row[CSV_COLUMNS.quantity]);
   const quantitySold = toNumber(row[CSV_COLUMNS.quantitySold]);
   const inStockCell = row[CSV_COLUMNS.quantityInStock];
+  const productId = buildProductId(csvProductId, brand);
 
   return {
-    // Product IDs repeat across batches, so the line number keeps each row unique.
-    rowId: `P${productId || "?"}-L${lineNumber}`,
+    // One product = one row in the list, so the product id is already unique.
+    rowId: productId,
     lineNumber,
     productId,
+    csvProductId,
     productName,
     brand,
     name: buildDisplayName(brand, productName),
+    // Filled in when the lines are grouped per product (see readInventory).
+    batchCount: 1,
     quantity,
     quantitySold,
     // When the "Quantity in Stock" cell is blank, fall back to quantity − sold.
@@ -133,16 +179,56 @@ export async function readInventoryTable(): Promise<CsvTable> {
   }
 }
 
-/** Loads every product batch from data/inventory/inventory.csv. */
-export async function readInventory(): Promise<InventoryItem[]> {
+/** Loads every single line of the spreadsheet, one object per batch. */
+export async function readInventoryBatches(): Promise<InventoryItem[]> {
   const table = await readInventoryTable();
   return table.rows.map((row, index) => toInventoryItem(row, index + 1));
 }
 
+/** True when batch `a` is a more recent record than batch `b`. */
+function isNewerRecord(a: InventoryItem, b: InventoryItem): boolean {
+  if (a.recordDate !== b.recordDate) return a.recordDate > b.recordDate;
+  // Same date on both lines: the one further down the file wins.
+  return a.lineNumber > b.lineNumber;
+}
+
+/**
+ * Loads the list of UNIQUE products shown on the page.
+ *
+ * The spreadsheet holds history (hundreds of batch lines per product), so the
+ * lines are grouped per product — see PRODUCT_KEY — and each product is
+ * represented by its newest record. `batchCount` says how many lines that product
+ * has in the file. Products come back in product-id order, brand by brand.
+ */
+export async function readInventory(): Promise<InventoryItem[]> {
+  const batches = await readInventoryBatches();
+  const newestPerProduct = new Map<string, InventoryItem>();
+
+  for (const batch of batches) {
+    const known = newestPerProduct.get(batch.productId);
+    if (!known) {
+      newestPerProduct.set(batch.productId, { ...batch });
+      continue;
+    }
+    known.batchCount += 1;
+    if (isNewerRecord(batch, known)) {
+      // Keep the running batch count while switching to the newer record.
+      newestPerProduct.set(batch.productId, { ...batch, batchCount: known.batchCount });
+    }
+  }
+
+  return Array.from(newestPerProduct.values()).sort(
+    (a, b) =>
+      (Number(a.csvProductId) || 0) - (Number(b.csvProductId) || 0) ||
+      a.csvProductId.localeCompare(b.csvProductId) ||
+      a.brand.localeCompare(b.brand)
+  );
+}
+
 /**
  * Sales department feed, derived from the inventory spreadsheet:
- * how much of each batch has already been sold ("Quantity Sold (liters/kg)").
- * Batches that have not sold anything yet are left out.
+ * how much of each product has sold on its newest record
+ * ("Quantity Sold (liters/kg)"). Products that have not sold anything are left out.
  */
 export async function readSales(): Promise<SalesItem[]> {
   const items = await readInventory();
@@ -156,8 +242,8 @@ export async function readSales(): Promise<SalesItem[]> {
 }
 
 /**
- * Receiving feed, derived from the inventory spreadsheet: each batch as it was
- * received — how much arrived, when it expires, and how it must be stored.
+ * Receiving feed, derived from the inventory spreadsheet: the newest received
+ * batch of each product — how much arrived, when it expires, how it is stored.
  */
 export async function readIncoming(): Promise<IncomingItem[]> {
   const items = await readInventory();
@@ -176,29 +262,51 @@ function toCell(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
-/** Copies the app's fields back onto a spreadsheet row, leaving other columns alone. */
-function writeItemIntoRow(row: Record<string, string>, item: InventoryItem): void {
-  row[CSV_COLUMNS.productId] = item.productId;
-  row[CSV_COLUMNS.productName] = item.productName;
-  row[CSV_COLUMNS.brand] = item.brand;
-  row[CSV_COLUMNS.quantity] = toCell(item.quantity);
-  row[CSV_COLUMNS.quantitySold] = toCell(item.quantitySold);
-  row[CSV_COLUMNS.quantityInStock] = toCell(item.quantityInStock);
-  row[CSV_COLUMNS.storageCondition] = item.storageCondition;
-  row[CSV_COLUMNS.expirationDate] = item.expirationDate;
-  row[CSV_COLUMNS.recordDate] = item.recordDate;
-  row[CSV_COLUMNS.shelfLifeDays] = toCell(item.shelfLifeDays);
-  row[CSV_COLUMNS.minimumStockThreshold] = toCell(item.minimumStockThreshold);
-  row[CSV_COLUMNS.reorderQuantity] = toCell(item.reorderQuantity);
+/**
+ * Writes a number into a cell, but only when the value really changed.
+ * This keeps cells such as "959.1" exactly as the file had them instead of
+ * rewriting them as "959.10" on every save.
+ */
+function setNumberCell(row: Record<string, string>, column: string, value: number): void {
+  const current = row[column];
+  if (current && current.trim() && toNumber(current) === value) return;
+  row[column] = toCell(value);
+}
+
+/** Writes text into a cell, but only when the value really changed. */
+function setTextCell(row: Record<string, string>, column: string, value: string): void {
+  if (row[column] === value) return;
+  row[column] = value;
 }
 
 /**
- * Saves updated batches back to data/inventory/inventory.csv.
+ * Copies the app's fields back onto a spreadsheet row, leaving other columns alone.
+ * The "Product ID" cell gets the raw file value (csvProductId), never the combined
+ * id shown on the page, so the spreadsheet keeps its original numbering.
+ */
+function writeItemIntoRow(row: Record<string, string>, item: InventoryItem): void {
+  setTextCell(row, CSV_COLUMNS.productId, item.csvProductId || item.productId);
+  setTextCell(row, CSV_COLUMNS.productName, item.productName);
+  setTextCell(row, CSV_COLUMNS.brand, item.brand);
+  setNumberCell(row, CSV_COLUMNS.quantity, item.quantity);
+  setNumberCell(row, CSV_COLUMNS.quantitySold, item.quantitySold);
+  setNumberCell(row, CSV_COLUMNS.quantityInStock, item.quantityInStock);
+  setTextCell(row, CSV_COLUMNS.storageCondition, item.storageCondition);
+  setTextCell(row, CSV_COLUMNS.expirationDate, item.expirationDate);
+  setTextCell(row, CSV_COLUMNS.recordDate, item.recordDate);
+  setNumberCell(row, CSV_COLUMNS.shelfLifeDays, item.shelfLifeDays);
+  setNumberCell(row, CSV_COLUMNS.minimumStockThreshold, item.minimumStockThreshold);
+  setNumberCell(row, CSV_COLUMNS.reorderQuantity, item.reorderQuantity);
+}
+
+/**
+ * Saves updated products back to data/inventory/inventory.csv.
  *
  * HOW IT KEEPS THE FILE INTACT:
  * - It re-reads the file first, then only overwrites the cells this app manages,
  *   so extra columns (prices, farm details, locations…) are never lost.
- * - Batches with lineNumber 0 are new deliveries and are added as new lines.
+ * - Each product is written back onto the line it was read from (its newest
+ *   record). Products with lineNumber 0 are new deliveries and become new lines.
  */
 export async function writeInventory(items: InventoryItem[]): Promise<void> {
   const table = await readInventoryTable();

@@ -7,9 +7,9 @@
  * its own snapshot.
  *
  * WHY THE RESPONSE IS TRIMMED:
- * The dataset holds thousands of batches. The totals and recommendations always
- * cover every batch, but only the most urgent lines (worst status first) and a
- * short alert preview are sent to the browser so the page stays fast.
+ * The totals and recommendations always cover every product, but only the most
+ * urgent lines (worst status first) and a short alert preview are sent to the
+ * browser so the page stays fast even if the dataset grows.
  * `lineTotal` and `alertTotal` report the real numbers.
  * ============================================================================
  */

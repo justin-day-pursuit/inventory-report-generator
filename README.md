@@ -2,7 +2,9 @@
 
 Inventory monitoring for coordinators: browse a real dairy inventory dataset batch by batch, see the stock status of every batch (sold out, understocked, overstocked, expiring soon, expired), and generate a curated restock report.
 
-Data source: `data/inventory/inventory.csv` — one line per product batch, with brand, quantity, quantity sold, storage condition, expiration date, and restock thresholds.
+Data source: `data/inventory/inventory.csv` — the dairy dataset, one line per product batch, with brand, quantity, quantity sold, storage condition, expiration date, and restock thresholds.
+
+**Unique products:** the spreadsheet stores history, so the same `Product ID` appears on hundreds of lines. The app groups those lines into unique products — one per brand of a product (`1-Amul` = Amul Milk, `1-Sudha` = Sudha Milk, 40 in total) — and shows each product's newest record. Every value on a row therefore comes from one real CSV line. `PRODUCT_KEY` in `lib/data-store.ts` switches the grouping to plain product ids (`1` … `10`, 10 rows) if that is preferred.
 
 ## Tech stack
 
@@ -98,7 +100,7 @@ docker run --rm -p 3000:3000 -v stockflow-data:/app/data stockflow
 ## How to use the page
 
 1. **Alert cards** summarize out-of-stock, understocked, overstocked, expiring, and expired items.
-2. **Current inventory** lists Product ID, Name (Brand + Product Name), Quantity (liters/kg), Quantity Sold (liters/kg), Storage Conditions, Expiration Date, and Status. 50 rows show per page by default; the **Show** dropdown goes up to 500. Search/filter stay fixed; the table scrolls; pagination sits below.
+2. **Current inventory** lists one row per unique product: Product ID, Name (Brand + Product Name), Quantity (liters/kg), Quantity Sold (liters/kg), Storage Conditions, Expiration Date, and Status. Hover a product id to see which dataset product it maps to and how many records it has. 50 rows show per page by default; the **Show** dropdown goes up to 500. Search/filter stay fixed; the table scrolls; pagination sits below.
 3. **Department data sync** — currently paused: the Load / Check / Update buttons are visible but their click handlers are commented out (see `app/page.tsx`).
 4. **Theme toggle** — Defaults to light mode; switch to dark anytime (saved in the browser).
 5. **Generate report** — Curated status report with recommendations.
@@ -107,7 +109,7 @@ docker run --rm -p 3000:3000 -v stockflow-data:/app/data stockflow
 
 | Path | Role |
 | --- | --- |
-| `data/inventory/inventory.csv` | Live stock — one line per dairy product batch (writable) |
+| `data/inventory/inventory.csv` | Live stock — one line per dairy product batch; grouped into unique products for display (writable) |
 | `data/inventory/inventory.seed.csv` | Untouched original dataset, used by `npm run restore:inventory` |
 
 ## Project layout

@@ -3,9 +3,13 @@
  * API: GET /api/inventory
  * ============================================================================
  * WHAT THIS ENDPOINT IS FOR:
- * Returns every product batch from data/inventory/inventory.csv together with the
- * alert badge counts. The main page calls this when it first loads and whenever
+ * Returns the unique products held in data/inventory/inventory.csv together with
+ * the alert badge counts. The main page calls this when it first loads and whenever
  * you press Refresh.
+ *
+ * Each product appears once, with its product id, and carries the values from its
+ * newest line in the spreadsheet. `sourceRecordCount` reports how many lines of
+ * batch history those products were built from.
  *
  * HOW TO MAINTAIN:
  * - Do not hard-code products here. Edit data/inventory/inventory.csv instead.
@@ -31,6 +35,7 @@ export async function GET() {
     return NextResponse.json({
       items,
       count: items.length,
+      sourceRecordCount: items.reduce((sum, item) => sum + item.batchCount, 0),
       alerts: alerts.slice(0, ALERT_PREVIEW_LIMIT),
       alertTotal: alerts.length,
       alertCounts: summarizeAlertCounts(alerts),

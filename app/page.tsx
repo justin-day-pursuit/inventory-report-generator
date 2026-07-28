@@ -10,8 +10,10 @@
  *   4) Generate a curated stock report
  *
  * WHERE THE ROWS COME FROM:
- * data/inventory/inventory.csv — one line per dairy product batch — served by
- * /api/inventory. The table columns match the spreadsheet columns:
+ * data/inventory/inventory.csv, served by /api/inventory. The spreadsheet keeps a
+ * line per batch, so it is grouped into unique products first: one row per product,
+ * each with its own product id, showing that product's newest record. The table
+ * columns match the spreadsheet columns:
  *   Product ID · Name (Brand + Product Name) · Quantity (liters/kg) ·
  *   Quantity Sold (liters/kg) · Storage Conditions · Expiration Date · Status
  * "Status" is worked out by the app (see classifyStatus in lib/inventory.ts).
@@ -46,7 +48,7 @@ const DEFAULT_PAGE_SIZE = 50;
 /** Choices offered in the "Show … rows" dropdown above the table. */
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 250, 500];
 
-/** The report can cover thousands of batches; this many rows are listed. */
+/** The report can cover every product; this many rows are listed. */
 const REPORT_ROW_LIMIT = 100;
 
 type AlertCounts = {
@@ -82,6 +84,8 @@ function formatUnits(value: number): string {
 export default function Home() {
   /* ---------- Inventory display state ---------- */
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  /** How many CSV batch lines the unique product list was built from. */
+  const [sourceRecordCount, setSourceRecordCount] = useState(0);
   const [alerts, setAlerts] = useState<InventoryAlert[]>([]);
   const [alertTotal, setAlertTotal] = useState(0);
   const [alertCounts, setAlertCounts] = useState<AlertCounts>(EMPTY_COUNTS);
@@ -102,7 +106,7 @@ export default function Home() {
     void refreshInventory();
   }, []);
 
-  /** Fetches every batch plus the alert badge counts from /api/inventory. */
+  /** Fetches the unique product list plus the alert badge counts from /api/inventory. */
   async function refreshInventory() {
     setLoadingInventory(true);
     setError(null);
@@ -111,6 +115,7 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Failed to load inventory.");
       setInventory(data.items ?? []);
+      setSourceRecordCount(data.sourceRecordCount ?? 0);
       setAlerts(data.alerts ?? []);
       setAlertTotal(data.alertTotal ?? (data.alerts?.length ?? 0));
       setAlertCounts(data.alertCounts ?? EMPTY_COUNTS);
@@ -263,7 +268,7 @@ export default function Home() {
             Stockflow
           </h1>
           <p className="mt-3 max-w-2xl text-[var(--muted)]">
-            Monitor live dairy stock batch by batch, spot expiry and restock risk early,
+            Monitor live dairy stock product by product, spot expiry and restock risk early,
             and generate an accurate restock report without retyping department data by hand.
           </p>
         </div>
@@ -323,7 +328,10 @@ export default function Home() {
             <p className="text-sm text-[var(--muted)]">
               {loadingInventory
                 ? "Loading stock…"
-                : `${filtered.length.toLocaleString()} of ${inventory.length.toLocaleString()} product batches shown`}
+                : `${filtered.length.toLocaleString()} of ${inventory.length.toLocaleString()} unique products shown` +
+                  (sourceRecordCount > 0
+                    ? ` · newest record of each, from ${sourceRecordCount.toLocaleString()} dataset rows`
+                    : "")}
             </p>
           </div>
           <button
@@ -425,7 +433,14 @@ export default function Home() {
                 ) : (
                   pageRows.map((item) => (
                     <tr key={item.rowId} className="row-divider hover:bg-[var(--hover-fill)]">
-                      <td className="font-mono px-4 py-3 text-[var(--muted)]">{item.productId}</td>
+                      <td
+                        className="font-mono px-4 py-3 text-[var(--muted)]"
+                        // Hovering explains where the id comes from and how much
+                        // history the dataset holds for this product.
+                        title={`Dataset product ${item.csvProductId} · ${item.brand || "no brand"} · newest of ${item.batchCount.toLocaleString()} record(s), dated ${item.recordDate}`}
+                      >
+                        {item.productId}
+                      </td>
                       <td className="px-4 py-3 font-medium">{item.name}</td>
                       <td className="px-4 py-3 text-right tabular-nums">
                         {formatUnits(item.quantity)}
@@ -522,7 +537,7 @@ export default function Home() {
               batch quantity, expiration date and storage condition
             </p>
             <p className="mt-2 text-sm text-[var(--muted)]">
-              Sync paused — every received batch is already listed in the inventory above.
+              Sync paused — the newest received batch of each product is already listed above.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <button
@@ -581,7 +596,7 @@ export default function Home() {
           <div>
             <h2 className="font-display text-xl font-semibold">Curated inventory report</h2>
             <p className="text-sm text-[var(--muted)]">
-              Cross-checks minimum stock levels, shelf life, and how fast each batch is selling.
+              Cross-checks minimum stock levels, shelf life, and how fast each product is selling.
             </p>
           </div>
           <button
@@ -609,7 +624,7 @@ export default function Home() {
             </ul>
 
             <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <MiniStat label="Batches" value={report.totals.itemCount} />
+              <MiniStat label="Products" value={report.totals.itemCount} />
               <MiniStat label="Units in stock" value={report.totals.totalUnits} />
               <MiniStat
                 label="Need reorder"
@@ -624,7 +639,7 @@ export default function Home() {
             <p className="mt-5 text-xs text-[var(--muted)]">
               Most urgent first — showing{" "}
               {Math.min(REPORT_ROW_LIMIT, report.lines.length).toLocaleString()} of{" "}
-              {(report.lineTotal ?? report.lines.length).toLocaleString()} batches.
+              {(report.lineTotal ?? report.lines.length).toLocaleString()} products.
             </p>
 
             <div className="mt-2 overflow-x-auto rounded-xl border border-[var(--panel-border)]">
