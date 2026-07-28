@@ -13,7 +13,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "ci": "npm run lint && npm run typecheck && npm run build",
-    "restore:inventory": "node -e \"require('fs').copyFileSync('data/inventory/inventory.seed.json','data/inventory/inventory.json'); console.log('Restored inventory.json from inventory.seed.json');\"",
+    "restore:inventory": "node -e \"require('fs').copyFileSync('data/inventory/inventory.seed.csv','data/inventory/inventory.csv'); console.log('Restored inventory.csv from inventory.seed.csv');\"",
     "docker:build": "docker build -t stockflow .",
     "docker:run": "docker run --rm -p 3000:3000 -v stockflow-data:/app/data --name stockflow stockflow"
   },
