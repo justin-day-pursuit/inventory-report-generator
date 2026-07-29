@@ -41,6 +41,8 @@
  *   morning aggregate; do not add the other badges together.
  * - Clicking a badge sets the inventory list filter dropdown to the matching
  *   option (same values as the "Show" filter). Search this file for applyBadgeFilter.
+ * - The small name/location/status chips under the badges are switched off —
+ *   search "ITEM STATUS CHIPS (SWITCHED OFF)" to restore them.
  * - The sync buttons are intentionally inert — search this file for "SWITCHED OFF".
  * - When you change visible text or layout, leave a short plain-English comment
  *   so a non-technical editor can find and update it later.
@@ -59,7 +61,9 @@ import {
   filterInventory,
   type ActionFilter,
   type ExpirationStatus,
+  /* ITEM STATUS CHIPS (SWITCHED OFF) — type for the commented chip strip below.
   type InventoryAlert,
+  */
   type InventoryItem,
   type StockReport,
   type StockStatus,
@@ -108,8 +112,10 @@ export default function Home() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [sourceRecordCount, setSourceRecordCount] = useState(0);
   const [referenceDate, setReferenceDate] = useState(APP_REFERENCE_DATE);
+  /* ITEM STATUS CHIPS (SWITCHED OFF) — re-enable with the chip strip below the badges.
   const [alerts, setAlerts] = useState<InventoryAlert[]>([]);
   const [alertTotal, setAlertTotal] = useState(0);
+  */
   const [alertCounts, setAlertCounts] = useState<AlertCounts>(EMPTY_COUNTS);
   const [search, setSearch] = useState("");
   /** Default morning view: only batches that need a decision today. */
@@ -139,8 +145,10 @@ export default function Home() {
       setInventory(data.items ?? []);
       setSourceRecordCount(data.sourceRecordCount ?? 0);
       setReferenceDate(data.referenceDate ?? APP_REFERENCE_DATE);
+      /* ITEM STATUS CHIPS (SWITCHED OFF) — paired with the chip strip under the badges.
       setAlerts(data.alerts ?? []);
       setAlertTotal(data.alertTotal ?? (data.alerts?.length ?? 0));
+      */
       setAlertCounts({ ...EMPTY_COUNTS, ...(data.alertCounts ?? {}) });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load inventory.");
@@ -340,6 +348,23 @@ export default function Home() {
         />
       </section>
 
+      {/*
+        ITEM STATUS CHIPS (SWITCHED OFF)
+        ---------------------------------------------------------
+        These small chips sat under the big summary badges and listed
+        individual batches (name · location · status), up to 8, with a
+        "+N more" note. They were removed from the morning view so the
+        page goes straight from the big badges to the inventory list.
+
+        HOW TO TURN THEM BACK ON:
+          1) Uncomment the block below.
+          2) Uncomment the `alerts` / `alertTotal` state and the
+             setAlerts / setAlertTotal lines inside refreshInventory
+             (search this file for "ITEM STATUS CHIPS").
+          3) Uncomment the InventoryAlert import at the top if needed.
+        The API still returns `alerts` / `alertTotal` — nothing else to change.
+      */}
+      {/*
       {alerts.length > 0 && (
         <div className="anim-rise anim-rise-delay-1 mb-6 flex flex-wrap gap-2">
           {alerts.slice(0, 8).map((alert, index) => (
@@ -362,6 +387,7 @@ export default function Home() {
           )}
         </div>
       )}
+      */}
 
       {/* ---- Inventory batch list ---- */}
       <section
