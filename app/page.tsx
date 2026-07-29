@@ -24,14 +24,20 @@
  * That is the morning list the coordinator asked for: what needs a decision today
  * without reading every row.
  *
- * TEST CLOCK:
+ * TEST CLOCK (shown on the page as "Today's Date"):
  * Status is measured against APP_REFERENCE_DATE in lib/inventory.ts (near the
  * earliest expiration in the dataset), not the real calendar, so shelf-life
- * badges stay useful on this historical export.
+ * badges stay useful on this historical export. The header line under the
+ * Stockflow title shows that date, the expiring window, and how many batches
+ * need action — written for a coordinator, not a developer.
  *
  * HOW TO MAINTAIN:
  * - DEFAULT_PAGE_SIZE / PAGE_SIZE_OPTIONS control how many rows show per page.
+ * - To change the fake "today" or the 14-day expiring window, edit
+ *   APP_REFERENCE_DATE / EXPIRING_SOON_DAYS in lib/inventory.ts (not this file).
  * - The sync buttons are intentionally inert — search this file for "SWITCHED OFF".
+ * - When you change visible text or layout, leave a short plain-English comment
+ *   so a non-technical editor can find and update it later.
  * ============================================================================
  */
 
@@ -184,10 +190,28 @@ export default function Home() {
           <h1 className="font-display mt-2 text-4xl font-semibold tracking-tight sm:text-5xl">
             Stockflow
           </h1>
+          {/*
+            Short pitch under the title — what Stockflow does in one sentence.
+            Edit the wording here if the product description changes; keep it
+            friendly and non-technical.
+          */}
           <p className="mt-3 max-w-2xl text-[var(--muted)]">
             See what needs attention today — low stock, upcoming expirations, and
             reorder candidates — without reading every row of the dairy spreadsheet.
           </p>
+          {/*
+            STATUS LINE (same text size as the pitch above so it is easy to spot)
+            Shows three facts the coordinator needs at a glance:
+              1) "Today's Date" — the date shelf life is judged against
+                 (APP_REFERENCE_DATE from lib/inventory.ts; not the real calendar
+                 while we use the historical dairy CSV)
+              2) Expiring window — how many days ahead counts as "expiring soon"
+              3) How many batches currently need action (bold number)
+            HOW TO MAINTAIN:
+              - Rename labels in the JSX below (e.g. "Today's Date").
+              - Change the date or window in lib/inventory.ts, not here.
+              - needsActionCount is calculated from the loaded inventory list.
+          */}
           <p className="mt-2 text-[var(--muted)]">
             <span className="font-bold">Today&apos;s Date</span>:{" "}
             <span className="font-mono">{referenceDate}</span>
