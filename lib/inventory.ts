@@ -410,14 +410,54 @@ export function buildAlerts(items: InventoryItem[], now: Date = new Date()): Inv
   return alerts;
 }
 
-/** Counts alerts of each kind for the top summary cards. */
-export function summarizeAlertCounts(alerts: InventoryAlert[]) {
+/**
+ * Counts how many BATCHES fall into each status for the top summary badges.
+ *
+ * WHY BATCHES (not alert messages):
+ * One batch can raise more than one alert (for example understocked AND expiring).
+ * The badges should answer "how many batches are sold out / understocked / …",
+ * so we count each batch at most once per status column.
+ *
+ * "needsAction" is the morning overview: expired, expiring soon, sold out, or
+ * understocked. Overstocked is tracked on its own badge and is NOT included.
+ *
+ * HOW TO MAINTAIN:
+ * - Status rules live in classifyExpirationStatus / classifyStockStatus / needsAction.
+ * - Change EXPIRING_SOON_DAYS or the stock thresholds above if the business rules change.
+ * - Do not sum the individual badges to get "Need action" — a batch can appear in
+ *   more than one detail badge, so the aggregate would be too high.
+ */
+export function summarizeBatchStatusCounts(
+  items: InventoryItem[],
+  now: Date = new Date()
+) {
+  let needsActionCount = 0;
+  let outOfStock = 0;
+  let understocked = 0;
+  let overstocked = 0;
+  let expiringSoon = 0;
+  let expired = 0;
+
+  for (const item of items) {
+    if (needsAction(item, now)) needsActionCount += 1;
+
+    const stock = classifyStockStatus(item);
+    if (stock === "out_of_stock") outOfStock += 1;
+    else if (stock === "understocked") understocked += 1;
+    else if (stock === "overstocked") overstocked += 1;
+
+    const expiration = classifyExpirationStatus(item, now);
+    if (expiration === "expired") expired += 1;
+    else if (expiration === "expiring_soon") expiringSoon += 1;
+  }
+
   return {
-    outOfStock: alerts.filter((a) => a.kind === "out_of_stock").length,
-    understocked: alerts.filter((a) => a.kind === "understocked").length,
-    overstocked: alerts.filter((a) => a.kind === "overstocked").length,
-    expiringSoon: alerts.filter((a) => a.kind === "expiring_soon").length,
-    expired: alerts.filter((a) => a.kind === "expired").length,
+    needsAction: needsActionCount,
+    outOfStock,
+    understocked,
+    overstocked,
+    expiringSoon,
+    expired,
   };
 }
 

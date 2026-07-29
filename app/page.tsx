@@ -4,7 +4,8 @@
  * ============================================================================
  * WHAT THIS PAGE IS FOR:
  * Morning workbench for the inventory coordinator. Top-to-bottom:
- *   1) Alert summary cards (sold out, understocked, overstocked, expiring, expired)
+ *   1) Alert summary cards (Need action overview, then sold out / understocked /
+ *      overstocked / expiring / expired — each number is a BATCH count)
  *   2) Batch list focused on what needs action today
  *   3) Department data sync panel (currently switched off)
  *   4) Curated stock report for the operations manager
@@ -35,6 +36,9 @@
  * - DEFAULT_PAGE_SIZE / PAGE_SIZE_OPTIONS control how many rows show per page.
  * - To change the fake "today" or the 14-day expiring window, edit
  *   APP_REFERENCE_DATE / EXPIRING_SOON_DAYS in lib/inventory.ts (not this file).
+ * - Badge numbers come from summarizeBatchStatusCounts in lib/inventory.ts via
+ *   /api/inventory (batch counts, not alert-message counts). "Need action" is the
+ *   morning aggregate; do not add the other badges together.
  * - The sync buttons are intentionally inert — search this file for "SWITCHED OFF".
  * - When you change visible text or layout, leave a short plain-English comment
  *   so a non-technical editor can find and update it later.
@@ -69,6 +73,8 @@ const PAGE_SIZE_OPTIONS = [25, 50, 100, 250, 500];
 const REPORT_ROW_LIMIT = 100;
 
 type AlertCounts = {
+  /** Morning overview: batches that are expired, expiring soon, sold out, or understocked. */
+  needsAction: number;
   outOfStock: number;
   understocked: number;
   overstocked: number;
@@ -77,6 +83,7 @@ type AlertCounts = {
 };
 
 const EMPTY_COUNTS: AlertCounts = {
+  needsAction: 0,
   outOfStock: 0,
   understocked: 0,
   overstocked: 0,
@@ -132,7 +139,7 @@ export default function Home() {
       setReferenceDate(data.referenceDate ?? APP_REFERENCE_DATE);
       setAlerts(data.alerts ?? []);
       setAlertTotal(data.alertTotal ?? (data.alerts?.length ?? 0));
-      setAlertCounts(data.alertCounts ?? EMPTY_COUNTS);
+      setAlertCounts({ ...EMPTY_COUNTS, ...(data.alertCounts ?? {}) });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load inventory.");
     } finally {
@@ -227,11 +234,32 @@ export default function Home() {
         </div>
       </header>
 
-      {/* ---- Alert badges / summary cards ---- */}
+      {/*
+        ALERT BADGES — morning overview strip under the page heading.
+        Each number is how many BATCHES currently have that status
+        (from /api/inventory → summarizeBatchStatusCounts).
+
+        Order matters:
+          1) Need action  — aggregate of sold out + understocked + expiring soon + expired
+                            (a batch counted once even if it has more than one problem)
+          2–6) Detail badges for each status, including Overstocked (not in Need action)
+
+        HOW TO MAINTAIN:
+          - Rename labels in the AlertCard calls below.
+          - Status rules live in lib/inventory.ts — not here.
+          - Grid is 6 columns on large screens so all badges stay on one row;
+            cards use compact padding so the row still fits.
+      */}
       <section
         aria-label="Inventory alerts"
-        className="anim-rise anim-rise-delay-1 mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
+        className="anim-rise anim-rise-delay-1 mb-6 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6"
       >
+        <AlertCard
+          label="Need action"
+          value={alertCounts.needsAction}
+          tone="action"
+          pulse={alertCounts.needsAction > 0}
+        />
         <AlertCard
           label="Sold out"
           value={alertCounts.outOfStock}
@@ -657,6 +685,16 @@ export default function Home() {
 /* Small presentational helpers                                               */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * One coloured summary badge in the morning overview strip.
+ *
+ * HOW TO MAINTAIN:
+ * - `label` is the small uppercase title (e.g. "Need action").
+ * - `value` is the batch count — keep it a whole number from the API.
+ * - `tone` picks the colour: action (green overview), danger, warn, over, info.
+ * - `pulse` softly animates when the count is greater than zero.
+ * - Padding and type are intentionally compact so six badges fit on one row.
+ */
 function AlertCard({
   label,
   value,
@@ -665,7 +703,7 @@ function AlertCard({
 }: {
   label: string;
   value: number;
-  tone: "danger" | "warn" | "over" | "info";
+  tone: "danger" | "warn" | "over" | "info" | "action";
   pulse?: boolean;
 }) {
   const color =
@@ -675,18 +713,22 @@ function AlertCard({
         ? "var(--warn)"
         : tone === "over"
           ? "var(--over)"
-          : "var(--info)";
+          : tone === "action"
+            ? "var(--accent)"
+            : "var(--info)";
 
   return (
     <div
-      className={`surface-card rounded-xl px-4 py-3 ${pulse ? "alert-pulse" : ""}`}
+      className={`surface-card rounded-xl px-3 py-2.5 ${pulse ? "alert-pulse" : ""}`}
       style={{
         borderColor: value > 0 ? `color-mix(in srgb, ${color} 45%, transparent)` : undefined,
       }}
     >
-      <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">{label}</p>
+      <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)] leading-tight">
+        {label}
+      </p>
       <p
-        className="mt-1 text-2xl font-semibold tabular-nums"
+        className="mt-1 text-xl font-semibold tabular-nums sm:text-2xl"
         style={{ color: value > 0 ? color : undefined }}
       >
         {value.toLocaleString()}
