@@ -39,6 +39,8 @@
  * - Badge numbers come from summarizeBatchStatusCounts in lib/inventory.ts via
  *   /api/inventory (batch counts, not alert-message counts). "Need action" is the
  *   morning aggregate; do not add the other badges together.
+ * - Clicking a badge sets the inventory list filter dropdown to the matching
+ *   option (same values as the "Show" filter). Search this file for applyBadgeFilter.
  * - The sync buttons are intentionally inert — search this file for "SWITCHED OFF".
  * - When you change visible text or layout, leave a short plain-English comment
  *   so a non-technical editor can find and update it later.
@@ -183,6 +185,30 @@ export default function Home() {
     [inventory]
   );
 
+  /**
+   * Applies the inventory list filter that matches a clicked alert badge.
+   * Also jumps back to page 1 and scrolls the batch list into view so the
+   * coordinator sees the filtered rows right away.
+   *
+   * Badge → filter mapping (must stay in sync with the <select> options below):
+   *   Need action   → needs_action
+   *   Sold out      → out_of_stock
+   *   Understocked  → understocked
+   *   Overstocked   → overstocked
+   *   Expiring soon → expiring_soon
+   *   Expired       → expired
+   */
+  function applyBadgeFilter(filter: ActionFilter) {
+    setActionFilter(filter);
+    setPage(1);
+    if (typeof document !== "undefined") {
+      document.getElementById("inventory-batches")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const pageRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -244,8 +270,15 @@ export default function Home() {
                             (a batch counted once even if it has more than one problem)
           2–6) Detail badges for each status, including Overstocked (not in Need action)
 
+        CLICK BEHAVIOUR:
+          Each badge is a button. Clicking it selects the matching option in the
+          inventory list filter dropdown (Needs action / Sold out / …) and scrolls
+          down to the list. The active badge is highlighted to match the dropdown.
+
         HOW TO MAINTAIN:
           - Rename labels in the AlertCard calls below.
+          - To change which filter a badge applies, edit the `filter` prop
+            (must be a value from the ActionFilter type / <select> options).
           - Status rules live in lib/inventory.ts — not here.
           - Grid is 6 columns on large screens so all badges stay on one row;
             cards use compact padding so the row still fits.
@@ -259,22 +292,52 @@ export default function Home() {
           value={alertCounts.needsAction}
           tone="action"
           pulse={alertCounts.needsAction > 0}
+          filter="needs_action"
+          active={actionFilter === "needs_action"}
+          onSelect={applyBadgeFilter}
         />
         <AlertCard
           label="Sold out"
           value={alertCounts.outOfStock}
           tone="danger"
           pulse={alertCounts.outOfStock > 0}
+          filter="out_of_stock"
+          active={actionFilter === "out_of_stock"}
+          onSelect={applyBadgeFilter}
         />
-        <AlertCard label="Understocked" value={alertCounts.understocked} tone="warn" />
-        <AlertCard label="Overstocked" value={alertCounts.overstocked} tone="over" />
+        <AlertCard
+          label="Understocked"
+          value={alertCounts.understocked}
+          tone="warn"
+          filter="understocked"
+          active={actionFilter === "understocked"}
+          onSelect={applyBadgeFilter}
+        />
+        <AlertCard
+          label="Overstocked"
+          value={alertCounts.overstocked}
+          tone="over"
+          filter="overstocked"
+          active={actionFilter === "overstocked"}
+          onSelect={applyBadgeFilter}
+        />
         <AlertCard
           label="Expiring soon"
           value={alertCounts.expiringSoon}
           tone="warn"
           pulse={alertCounts.expiringSoon > 0}
+          filter="expiring_soon"
+          active={actionFilter === "expiring_soon"}
+          onSelect={applyBadgeFilter}
         />
-        <AlertCard label="Expired" value={alertCounts.expired} tone="danger" />
+        <AlertCard
+          label="Expired"
+          value={alertCounts.expired}
+          tone="danger"
+          filter="expired"
+          active={actionFilter === "expired"}
+          onSelect={applyBadgeFilter}
+        />
       </section>
 
       {alerts.length > 0 && (
@@ -301,7 +364,11 @@ export default function Home() {
       )}
 
       {/* ---- Inventory batch list ---- */}
-      <section aria-label="Current inventory" className="anim-rise anim-rise-delay-2 mb-8">
+      <section
+        id="inventory-batches"
+        aria-label="Current inventory"
+        className="anim-rise anim-rise-delay-2 mb-8 scroll-mt-4"
+      >
         <div className="mb-3 flex items-end justify-between gap-3">
           <div>
             <h2 className="font-display text-xl font-semibold">Inventory batches</h2>
@@ -693,6 +760,8 @@ export default function Home() {
  * - `value` is the batch count — keep it a whole number from the API.
  * - `tone` picks the colour: action (green overview), danger, warn, over, info.
  * - `pulse` softly animates when the count is greater than zero.
+ * - `filter` / `onSelect` wire the click to the inventory list dropdown.
+ * - `active` is true when this badge's filter is the one currently selected.
  * - Padding and type are intentionally compact so six badges fit on one row.
  */
 function AlertCard({
@@ -700,11 +769,17 @@ function AlertCard({
   value,
   tone,
   pulse,
+  filter,
+  active,
+  onSelect,
 }: {
   label: string;
   value: number;
   tone: "danger" | "warn" | "over" | "info" | "action";
   pulse?: boolean;
+  filter: ActionFilter;
+  active: boolean;
+  onSelect: (filter: ActionFilter) => void;
 }) {
   const color =
     tone === "danger"
@@ -718,10 +793,19 @@ function AlertCard({
             : "var(--info)";
 
   return (
-    <div
-      className={`surface-card rounded-xl px-3 py-2.5 ${pulse ? "alert-pulse" : ""}`}
+    <button
+      type="button"
+      onClick={() => onSelect(filter)}
+      aria-pressed={active}
+      title={`Show ${label.toLowerCase()} batches in the list below`}
+      className={`surface-card w-full rounded-xl px-3 py-2.5 text-left transition hover:bg-[var(--hover-fill)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/50 ${
+        pulse ? "alert-pulse" : ""
+      }`}
       style={{
-        borderColor: value > 0 ? `color-mix(in srgb, ${color} 45%, transparent)` : undefined,
+        borderColor: `color-mix(in srgb, ${color} ${active || value > 0 ? 55 : 20}%, transparent)`,
+        // Stronger coloured edge when this badge matches the list filter.
+        boxShadow: active ? `0 0 0 2px color-mix(in srgb, ${color} 55%, transparent)` : undefined,
+        background: active ? `color-mix(in srgb, ${color} 10%, transparent)` : undefined,
       }}
     >
       <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)] leading-tight">
@@ -729,11 +813,11 @@ function AlertCard({
       </p>
       <p
         className="mt-1 text-xl font-semibold tabular-nums sm:text-2xl"
-        style={{ color: value > 0 ? color : undefined }}
+        style={{ color: value > 0 || active ? color : undefined }}
       >
         {value.toLocaleString()}
       </p>
-    </div>
+    </button>
   );
 }
 
