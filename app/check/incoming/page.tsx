@@ -2,19 +2,9 @@
  * ============================================================================
  * CHECK INCOMING SUPPLIES PAGE (app/check/incoming/page.tsx)
  * ============================================================================
- * WHAT THIS PAGE IS FOR:
- * A read-only list of received product batches — how much arrived, when it
- * expires, and how it must be stored. It reads /api/incoming, which builds the
- * list from data/inventory/inventory.csv.
- *
- * HOW TO REACH IT:
- * Open /check/incoming directly. The "Check incoming supplies" button on the main
- * page is currently switched off (see app/page.tsx).
- *
- * HOW TO MAINTAIN:
- * - Keep the columns in sync with the fields /api/incoming returns:
- *   name (brand + product), quantity, expirationDate, storageCondition.
- * - The API returns the first 500 rows by default; use ?limit=all for every row.
+ * Read-only list of inventory batches from /api/incoming — quantity, expiration,
+ * storage, location and sales channel. The main-page button that opens this tab
+ * is currently switched off.
  * ============================================================================
  */
 
@@ -78,7 +68,7 @@ export default function CheckIncomingPage() {
       <div className="inventory-shell" style={{ maxHeight: "75vh" }}>
         <div className="inventory-toolbar">
           <p className="text-sm text-[var(--muted)]">
-            {items.length.toLocaleString()} of {total.toLocaleString()} supply row(s)
+            {items.length.toLocaleString()} of {total.toLocaleString()} batch(es)
           </p>
         </div>
         <div className="inventory-scroll">
@@ -86,7 +76,9 @@ export default function CheckIncomingPage() {
             <thead className="table-head sticky top-0 text-left text-[var(--muted)]">
               <tr>
                 <th className="px-4 py-3 font-medium">Name</th>
-                <th className="px-4 py-3 text-right font-medium">Quantity (liters/kg)</th>
+                <th className="px-4 py-3 font-medium">Location</th>
+                <th className="px-4 py-3 font-medium">Sales Channel</th>
+                <th className="px-4 py-3 text-right font-medium">Quantity</th>
                 <th className="px-4 py-3 font-medium">Storage Conditions</th>
                 <th className="px-4 py-3 font-medium">Expiration Date</th>
               </tr>
@@ -94,14 +86,19 @@ export default function CheckIncomingPage() {
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-[var(--muted)]">
+                  <td colSpan={6} className="px-4 py-8 text-center text-[var(--muted)]">
                     No batches found in data/inventory/inventory.csv.
                   </td>
                 </tr>
               ) : (
-                items.map((row) => (
-                  <tr key={row.name} className="row-divider">
+                items.map((row, idx) => (
+                  <tr
+                    key={`${row.name}-${row.location ?? ""}-${row.salesChannel ?? ""}-${idx}`}
+                    className="row-divider"
+                  >
                     <td className="px-4 py-3">{row.name}</td>
+                    <td className="px-4 py-3">{row.location ?? "—"}</td>
+                    <td className="px-4 py-3">{row.salesChannel ?? "—"}</td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {row.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     </td>

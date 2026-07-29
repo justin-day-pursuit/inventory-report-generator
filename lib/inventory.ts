@@ -3,161 +3,194 @@
  * INVENTORY CORE LOGIC (lib/inventory.ts)
  * ============================================================================
  * WHAT THIS FILE IS FOR:
- * This file holds the shared "brain" of the inventory tool. It does NOT talk to the
- * browser, the network, or the data file by itself. Instead, the web pages and API
- * routes call these helpers to:
- *   1) Describe what an inventory row looks like (one unique dairy product)
- *   2) Work out the stock status of a product (sold out, expiring soon, …)
- *   3) Build alert badges for the top of the monitoring page
- *   4) Apply sales (−) and incoming supplies (+) to stock levels
+ * Shared "brain" for the inventory coordinator tool. It does not talk to the
+ * browser or the network. Pages and API routes call these helpers to:
+ *   1) Describe what one inventory BATCH looks like
+ *   2) Work out expiration status and stock status for that batch
+ *   3) Build alert badges and "needs action" filters for the morning review
+ *   4) Apply sales (−) and incoming supplies (+) when those feeds are re-enabled
  *   5) Build a curated stock report for the operations manager
  *
- * WHERE THE DATA COMES FROM:
- * data/inventory/inventory.csv — a real dairy dataset. The file stores history, one
- * line per batch, so the same product appears on hundreds of lines. lib/data-store.ts
- * groups those lines into UNIQUE products and keeps the newest record of each, which
- * is what the list on the page shows.
+ * HOW A BATCH IS IDENTIFIED:
+ * A batch is one unique combination of:
+ *   Location + Product Name + Brand + Storage Condition + Sales Channel
+ * Brand + Product Name is the human-readable name shown in the list
+ * (for example "Amul Milk"). The CSV's "Product ID" is NOT used as an identifier —
+ * every brand of a product shares the same id.
  *
- * HOW A PRODUCT IS IDENTIFIED:
- * By its name — brand plus product name, for example "Amul Milk". That combination
- * is unique in this dataset. The file's "Product ID" column is NOT used as an
- * identifier: every brand of a product shares the same id (id 1 covers Amul Milk,
- * Sudha Milk, Raj Milk and Mother Dairy Milk), so it cannot tell products apart.
+ * HOW NUMBERS ARE COMBINED (done in lib/data-store.ts, used here as-is):
+ *   Quantity / Minimum Stock Threshold / Reorder Quantity / money totals
+ *     → sum of the CSV lines in the batch
+ *   Expiration date
+ *     → earliest of (Expiration Date) and (Production Date + Shelf Life days)
+ *       across every line in the batch
+ *   Customer locations
+ *     → running list of the distinct Customer Location values in the batch
+ * Quantity Sold and Quantity in Stock are intentionally ignored for status math.
  *
- * The columns used by this app are:
- *   Product Name, Brand, Quantity (liters/kg),
- *   Quantity Sold (liters/kg), Quantity in Stock (liters/kg), Storage Condition,
- *   Expiration Date, Date, Shelf Life (days),
- *   Minimum Stock Threshold (liters/kg), Reorder Quantity (liters/kg)
- * The mapping from those column names to the fields below lives in lib/data-store.ts.
- *
- * HOW TO MAINTAIN (non-technical notes):
- * - Alert rules (how many days before expiration counts as "expiring soon", how
- *   much stock counts as overstocked) live in the ALERT SETTINGS section below.
- *   Change those numbers carefully — everything else follows from them.
- * - If you add a new column to the CSV and want to show it, add a field to
- *   InventoryItem here AND map it in lib/data-store.ts.
- * - Do not delete functions that are imported by app/api/* — the pages rely on them.
+ * HOW TO MAINTAIN:
+ * - Alert / filter windows (days to expiry, overstock multiple, test "today")
+ *   live in the SETTINGS section below — change those carefully.
+ * - Do not delete functions imported by app/api/* — the pages rely on them.
  * ============================================================================
  */
 
 /* -------------------------------------------------------------------------- */
-/* ALERT SETTINGS — tweak these numbers when business rules change            */
+/* SETTINGS — tweak these when business rules or the test calendar change     */
 /* -------------------------------------------------------------------------- */
 
-/** How many days before the expiration date we start warning the coordinator. */
-export const EXPIRING_SOON_DAYS = 5;
+/**
+ * Fake "today" used for every shelf-life and status calculation.
+ *
+ * WHY: the dairy CSV is a historical export (expiration dates run 2018–2023).
+ * Judging those dates against the real calendar would mark almost everything
+ * expired. This constant is set close to the earliest Expiration Date in the
+ * file (2018-11-14) so the coordinator view can be tested with a realistic mix
+ * of expired / expiring-soon / still-good batches.
+ *
+ * MAINTENANCE: Move this forward when you want to re-test against a later slice
+ * of the dataset, or switch STATUS_CLOCK to "real_today" for a live feed.
+ */
+export const APP_REFERENCE_DATE = "2018-11-20";
 
-/** Minimum stock level used when the CSV row leaves that column empty. */
+/**
+ * Which clock to use when measuring shelf life and stock status.
+ * - "app_reference_date" (default): use APP_REFERENCE_DATE above.
+ * - "real_today": use the computer's real calendar date (for live exports).
+ */
+export const STATUS_CLOCK: "app_reference_date" | "real_today" = "app_reference_date";
+
+/**
+ * How many days ahead of expiration counts as "expiring soon".
+ * Matches the coordinator habit of checking anything coming up in the next
+ * two weeks every morning.
+ */
+export const EXPIRING_SOON_DAYS = 14;
+
+/** Fallback minimum stock level when a batch somehow has no threshold. */
 export const DEFAULT_MINIMUM_STOCK_THRESHOLD = 50;
 
-/** Reorder amount used when the CSV row leaves that column empty. */
+/** Fallback reorder amount when a batch somehow has no reorder quantity. */
 export const DEFAULT_REORDER_QUANTITY = 100;
 
 /**
- * How much stock counts as "overstocked".
- * A batch is flagged when what is left on hand reaches
- *   minimum stock threshold + (this number × reorder quantity).
- * Example with the default of 3: a product whose minimum is 50 and whose reorder
- * amount is 100 is flagged as overstocked once 350 units are still sitting in stock.
+ * How much stock counts as overstocked.
+ * A batch is overstocked when:
+ *   quantity >= minimumStockThreshold + (this × reorderQuantity)
+ * Raise this number to flag fewer overstocked batches; lower it to flag more.
  */
-export const OVERSTOCK_REORDER_MULTIPLE = 3;
-
-/**
- * WHICH DAY COUNTS AS "TODAY" FOR SHELF LIFE.
- *
- * The dataset is a historical export: every batch was recorded on its own date
- * (the CSV "Date" column) and most expiration dates are long past by now. Judging
- * those batches against the real calendar would simply mark all of them expired,
- * which tells a coordinator nothing.
- *
- * - "record_date" (default): each product is judged against the day its record was
- *   written, so the Status column shows the mix of healthy / expiring / expired
- *   stock the dataset actually describes.
- * - "today": judge every batch against the real calendar date. Switch to this once
- *   the CSV is fed by a live, up-to-date export.
- */
-export const SHELF_LIFE_REFERENCE: "record_date" | "today" = "record_date";
+export const OVERSTOCK_REORDER_MULTIPLE = 5;
 
 /* -------------------------------------------------------------------------- */
-/* DATA SHAPES — these match the columns in data/inventory/inventory.csv       */
+/* DATA SHAPES                                                                */
 /* -------------------------------------------------------------------------- */
 
 /**
- * One unique dairy product, taken from its newest line in
- * data/inventory/inventory.csv. Every value below comes from that same line, so
- * the brand, product name, quantities and dates always belong together.
+ * One inventory BATCH shown in the coordinator list.
+ * Built by grouping CSV lines that share the same location, product name, brand,
+ * storage condition and sales channel (see lib/data-store.ts).
  */
 export type InventoryItem = {
-  /** Which data line of the CSV this product was read from (1 = first data line). */
-  lineNumber: number;
   /**
-   * The raw CSV "Product ID" value, for example "1". Shared by every brand of the
-   * same product, so it never identifies a product — it is kept only so that
-   * saving the file preserves that column. It is not shown on the page.
+   * Stable key for this batch — location|product|brand|storage|channel.
+   * Used by React lists and by the save routine; not shown as its own column.
    */
+  batchKey: string;
+  /** CSV data-line number of the newest source row (1 = first data line). */
+  lineNumber: number;
+  /** How many CSV lines were rolled into this batch. */
+  sourceRowCount: number;
+  /** Raw CSV "Product ID" from the newest source row — preserved on write only. */
   csvProductId: string;
   /** CSV "Product Name", for example "Milk". */
   productName: string;
   /** CSV "Brand", for example "Amul". */
   brand: string;
-  /**
-   * Brand followed by product name, for example "Amul Milk".
-   * THIS IS THE UNIQUE IDENTIFIER of a product: it appears once in the list, and
-   * every other part of the app (alerts, feeds, updates) matches on it.
-   */
+  /** Display name: Brand + Product Name, for example "Amul Milk". */
   name: string;
-  /** How many lines this product has in the CSV (its batch history). */
-  batchCount: number;
-  /** CSV "Quantity (liters/kg)" — how much of this batch was produced / received. */
-  quantity: number;
-  /** CSV "Quantity Sold (liters/kg)" — how much of the batch has already sold. */
-  quantitySold: number;
-  /** CSV "Quantity in Stock (liters/kg)" — what is left on hand (quantity − sold). */
-  quantityInStock: number;
+  /** CSV "Location" — dairy farm / supply geography for this batch. */
+  location: string;
+  /** CSV "Sales Channel" — Retail, Wholesale, or Online. */
+  salesChannel: string;
   /** CSV "Storage Condition", for example "Refrigerated". */
   storageCondition: string;
-  /** CSV "Expiration Date" as YYYY-MM-DD. */
-  expirationDate: string;
-  /** CSV "Date" — the day this record was written (its snapshot date). */
-  recordDate: string;
-  /** CSV "Shelf Life (days)" — how long the batch stays sellable after production. */
-  shelfLifeDays: number;
-  /** CSV "Minimum Stock Threshold (liters/kg)" — restock at or below this level. */
+  /**
+   * Sum of "Quantity (liters/kg)" across the batch.
+   * This is the on-hand figure used for stock-status math (Quantity Sold and
+   * Quantity in Stock are ignored on purpose for now).
+   */
+  quantity: number;
+  /** Sum of "Minimum Stock Threshold (liters/kg)" across the batch. */
   minimumStockThreshold: number;
-  /** CSV "Reorder Quantity (liters/kg)" — how much is normally reordered. */
+  /** Sum of "Reorder Quantity (liters/kg)" across the batch. */
   reorderQuantity: number;
+  /**
+   * Effective expiration date for the batch (YYYY-MM-DD): the earliest date
+   * among every source row's min(Expiration Date, Production Date + Shelf Life).
+   */
+  expirationDate: string;
+  /** Sum of "Total Value" across the batch (informational). */
+  totalValue: number;
+  /** Sum of "Approx. Total Revenue(INR)" across the batch (informational). */
+  approxTotalRevenue: number;
+  /**
+   * Quantity-weighted average of "Price per Unit" across the batch
+   * (summing unit prices would be meaningless, so we average them).
+   */
+  pricePerUnit: number;
+  /**
+   * Running list of distinct "Customer Location" values seen in the batch.
+   * Location itself is part of the batch key, so it stays a single value;
+   * customer locations can differ across the lines that rolled together.
+   */
+  customerLocations: string[];
+  /** Newest CSV "Date" among the source rows (snapshot / recording date). */
+  recordDate: string;
 };
 
 /**
- * One sales line from the sales department feed.
- * The feed shown by /api/sales is derived from the "Quantity Sold (liters/kg)"
- * column of the inventory CSV.
+ * Sales feed row. Matched to a batch by brand + product name.
+ * Quantity sold is accepted for future update flows but is not used in status math.
  */
 export type SalesItem = {
-  /** Brand + product name, for example "Amul Milk" — how the product is matched. */
   name: string;
-  /** Units sold that should be taken out of stock. */
   quantitySold: number;
 };
 
-/**
- * One incoming supply line from warehousing / receiving.
- * The feed shown by /api/incoming is derived from the batch columns of the
- * inventory CSV (quantity, expiration date, storage condition).
- */
+/** Incoming supply feed row. Matched to a batch by brand + product name. */
 export type IncomingItem = {
-  /** Brand + product name, for example "Amul Milk" — how the product is matched. */
   name: string;
-  /** Units received, which arrive as a brand-new batch. */
   quantity: number;
-  /** Expiration date of the arriving batch, YYYY-MM-DD. */
   expirationDate: string;
-  /** How the arriving batch must be stored. */
   storageCondition: string;
+  location?: string;
+  salesChannel?: string;
 };
 
-/** Categories of attention badges shown at the top of the monitoring page. */
+/** Shelf-life outcome for the Expiration Status column. */
+export type ExpirationStatus = "expired" | "expiring_soon" | "ok";
+
+/** Stock-level outcome for the Stock Status column. */
+export type StockStatus =
+  | "out_of_stock"
+  | "understocked"
+  | "overstocked"
+  | "healthy";
+
+/**
+ * Combined attention flag used by the morning "Needs action" filter.
+ * A batch needs action when either its shelf life or its stock level is unhealthy.
+ */
+export type ActionFilter =
+  | "needs_action"
+  | "expired"
+  | "expiring_soon"
+  | "out_of_stock"
+  | "understocked"
+  | "overstocked"
+  | "healthy"
+  | "all";
+
 export type AlertKind =
   | "out_of_stock"
   | "understocked"
@@ -167,26 +200,21 @@ export type AlertKind =
 
 export type InventoryAlert = {
   kind: AlertKind;
-  /** Brand + product name — identifies the product the alert belongs to. */
   name: string;
+  location: string;
   message: string;
 };
 
-export type StockStatus =
-  | "out_of_stock"
-  | "understocked"
-  | "overstocked"
-  | "expiring_soon"
-  | "expired"
-  | "healthy";
-
 export type StockLine = InventoryItem & {
-  status: StockStatus;
+  expirationStatus: ExpirationStatus;
+  stockStatus: StockStatus;
   daysUntilExpiration: number;
+  needsAction: boolean;
 };
 
 export type StockReport = {
   generatedAt: string;
+  referenceDate: string;
   summary: string;
   recommendations: string[];
   totals: {
@@ -198,6 +226,7 @@ export type StockReport = {
     expiringSoonCount: number;
     expiredCount: number;
     healthyCount: number;
+    needsActionCount: number;
   };
   lines: StockLine[];
   alerts: InventoryAlert[];
@@ -207,116 +236,134 @@ export type StockReport = {
 /* DATE HELPERS                                                               */
 /* -------------------------------------------------------------------------- */
 
-/** Turns a YYYY-MM-DD text value into a real date, or null when it is unusable. */
+/** Turns a YYYY-MM-DD string into a Date at local midnight, or null if unusable. */
 function toDate(value: string): Date | null {
   if (!value) return null;
   const parsed = new Date(`${value.slice(0, 10)}T00:00:00`);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-/**
- * Counts whole days between two dates (later minus earlier).
- * Negative numbers mean the first date is already in the past.
- */
+/** Whole days between two calendar dates (later − earlier). */
 function daysBetween(from: Date, to: Date): number {
   const msPerDay = 24 * 60 * 60 * 1000;
-  const fromMidnight = new Date(from.getFullYear(), from.getMonth(), from.getDate());
-  const toMidnight = new Date(to.getFullYear(), to.getMonth(), to.getDate());
-  return Math.round((toMidnight.getTime() - fromMidnight.getTime()) / msPerDay);
+  const a = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const b = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+  return Math.round((b.getTime() - a.getTime()) / msPerDay);
 }
 
 /**
- * Which day a product is measured against — see SHELF_LIFE_REFERENCE at the top.
- * Falls back to the real date whenever the CSV row has no usable record date.
+ * The "today" the rest of the status helpers measure against.
+ * Honours STATUS_CLOCK / APP_REFERENCE_DATE so tests stay reproducible.
  */
-export function shelfLifeReferenceDate(item: InventoryItem, now: Date = new Date()): Date {
-  if (SHELF_LIFE_REFERENCE === "today") return now;
-  return toDate(item.recordDate) ?? now;
+export function appToday(now: Date = new Date()): Date {
+  if (STATUS_CLOCK === "real_today") return now;
+  return toDate(APP_REFERENCE_DATE) ?? now;
 }
 
 /**
- * How many days of shelf life a product has left.
- * Zero or more means still sellable; a negative number means already expired.
- * Batches without a readable expiration date are treated as "plenty of time left"
- * so that a blank cell never raises a false expiry alarm.
+ * How many days of shelf life a batch still has, measured from appToday().
+ * Negative = already expired. Missing dates are treated as "far in the future"
+ * so a blank cell never raises a false expiry alarm.
  */
 export function daysUntilExpiration(item: InventoryItem, now: Date = new Date()): number {
   const expiration = toDate(item.expirationDate);
   if (!expiration) return Number.POSITIVE_INFINITY;
-  return daysBetween(shelfLifeReferenceDate(item, now), expiration);
+  return daysBetween(appToday(now), expiration);
 }
 
 /* -------------------------------------------------------------------------- */
-/* STOCK LEVEL HELPERS                                                        */
+/* STATUS HELPERS                                                             */
 /* -------------------------------------------------------------------------- */
 
-/**
- * How much of a product is still on hand.
- * The dataset provides this as "Quantity in Stock (liters/kg)"; when that cell is
- * missing we fall back to the two columns shown in the table
- * (Quantity − Quantity Sold), which is the same figure.
- */
-export function unitsOnHand(item: InventoryItem): number {
-  const inStock = Number.isFinite(item.quantityInStock) ? item.quantityInStock : NaN;
-  const fallback = item.quantity - item.quantitySold;
-  const value = Number.isNaN(inStock) ? fallback : inStock;
-  return Math.max(0, value);
-}
-
-/** Restock level for a product, using the shared default when the CSV cell is empty. */
+/** Restock floor for a batch (summed threshold, with a safe default). */
 export function minimumStockLevel(item: InventoryItem): number {
   return item.minimumStockThreshold > 0
     ? item.minimumStockThreshold
     : DEFAULT_MINIMUM_STOCK_THRESHOLD;
 }
 
-/** The level at which a product counts as overstocked (see OVERSTOCK_REORDER_MULTIPLE). */
+/** Level at which a batch counts as overstocked. */
 export function overstockLevel(item: InventoryItem): number {
   const reorder = item.reorderQuantity > 0 ? item.reorderQuantity : DEFAULT_REORDER_QUANTITY;
   return minimumStockLevel(item) + OVERSTOCK_REORDER_MULTIPLE * reorder;
 }
 
-/* -------------------------------------------------------------------------- */
-/* STATUS + ALERTS                                                            */
-/* -------------------------------------------------------------------------- */
+/**
+ * Expiration Status column — only looks at the batch's effective expiration date.
+ * Does not consider stock quantity.
+ */
+export function classifyExpirationStatus(
+  item: InventoryItem,
+  now: Date = new Date()
+): ExpirationStatus {
+  const days = daysUntilExpiration(item, now);
+  if (days < 0) return "expired";
+  if (days <= EXPIRING_SOON_DAYS) return "expiring_soon";
+  return "ok";
+}
 
 /**
- * Picks the single most urgent status for a product — this is what the Status
- * column on the page shows.
- *
- * Priority order (worst first): expired → out of stock → expiring soon →
- * understocked → overstocked → healthy.
- *
- * MAINTENANCE: If operations wants a different priority (for example understocked
- * before expiring soon), reorder the if-statements below.
+ * Stock Status column — only looks at Quantity vs the summed thresholds.
+ * Quantity Sold and Quantity in Stock are ignored (see file header).
  */
-export function classifyStatus(item: InventoryItem, now: Date = new Date()): StockStatus {
-  const days = daysUntilExpiration(item, now);
-  const onHand = unitsOnHand(item);
-
-  if (days < 0) return "expired";
+export function classifyStockStatus(item: InventoryItem): StockStatus {
+  const onHand = item.quantity;
   if (onHand <= 0) return "out_of_stock";
-  if (days <= EXPIRING_SOON_DAYS) return "expiring_soon";
   if (onHand <= minimumStockLevel(item)) return "understocked";
   if (onHand >= overstockLevel(item)) return "overstocked";
   return "healthy";
 }
 
-/** Rounds a stock figure to one decimal so messages stay readable. */
+/**
+ * True when a coordinator should act today: shelf-life risk and/or stock-level risk
+ * that can lead to a stockout. Overstocked alone is tracked separately so the
+ * default morning list stays focused on the preventable failures (stockouts + waste).
+ */
+export function needsAction(item: InventoryItem, now: Date = new Date()): boolean {
+  const expiration = classifyExpirationStatus(item, now);
+  const stock = classifyStockStatus(item);
+  return (
+    expiration === "expired" ||
+    expiration === "expiring_soon" ||
+    stock === "out_of_stock" ||
+    stock === "understocked"
+  );
+}
+
+/**
+ * Combined single status kept for older call sites / report chips that expect
+ * one label. Prefer classifyExpirationStatus + classifyStockStatus for new UI.
+ * Priority: expired → out of stock → expiring soon → understocked → overstocked → healthy.
+ */
+export function classifyStatus(
+  item: InventoryItem,
+  now: Date = new Date()
+): ExpirationStatus | StockStatus | "healthy" {
+  const expiration = classifyExpirationStatus(item, now);
+  if (expiration === "expired") return "expired";
+  const stock = classifyStockStatus(item);
+  if (stock === "out_of_stock") return "out_of_stock";
+  if (expiration === "expiring_soon") return "expiring_soon";
+  if (stock === "understocked") return "understocked";
+  if (stock === "overstocked") return "overstocked";
+  return "healthy";
+}
+
+/** Rounds a stock figure to one decimal so alert text stays readable. */
 function round1(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
 /**
- * Builds the alert list behind the badges at the top of the monitoring page.
- * One product can produce more than one alert (for example low stock AND expiring soon).
+ * Builds the alert list behind the top summary cards.
+ * One batch can produce more than one alert (for example low stock AND expiring).
  */
 export function buildAlerts(items: InventoryItem[], now: Date = new Date()): InventoryAlert[] {
   const alerts: InventoryAlert[] = [];
 
   for (const item of items) {
     const days = daysUntilExpiration(item, now);
-    const onHand = unitsOnHand(item);
+    const onHand = item.quantity;
     const minimum = minimumStockLevel(item);
     const overstock = overstockLevel(item);
 
@@ -324,13 +371,15 @@ export function buildAlerts(items: InventoryItem[], now: Date = new Date()): Inv
       alerts.push({
         kind: "expired",
         name: item.name,
-        message: `Expired ${Math.abs(days)} day(s) ago — remove or markdown.`,
+        location: item.location,
+        message: `Expired ${Math.abs(days)} day(s) ago at ${item.location} — remove or markdown.`,
       });
     } else if (days <= EXPIRING_SOON_DAYS) {
       alerts.push({
         kind: "expiring_soon",
         name: item.name,
-        message: `Expires in ${days} day(s) — prioritize sale or transfer.`,
+        location: item.location,
+        message: `Expires in ${days} day(s) at ${item.location} (${item.salesChannel}) — prioritize sale or transfer.`,
       });
     }
 
@@ -338,19 +387,22 @@ export function buildAlerts(items: InventoryItem[], now: Date = new Date()): Inv
       alerts.push({
         kind: "out_of_stock",
         name: item.name,
-        message: "Sold out — lost sales risk until the next batch arrives.",
+        location: item.location,
+        message: `Sold out at ${item.location} — reorder ${round1(item.reorderQuantity || DEFAULT_REORDER_QUANTITY)}.`,
       });
     } else if (onHand <= minimum) {
       alerts.push({
         kind: "understocked",
         name: item.name,
-        message: `Only ${round1(onHand)} left (restock at ${round1(minimum)}).`,
+        location: item.location,
+        message: `Only ${round1(onHand)} left at ${item.location} (reorder at ${round1(minimum)}; suggested ${round1(item.reorderQuantity)}).`,
       });
     } else if (onHand >= overstock) {
       alerts.push({
         kind: "overstocked",
         name: item.name,
-        message: `${round1(onHand)} still in stock, above the overstock limit of ${round1(overstock)}.`,
+        location: item.location,
+        message: `${round1(onHand)} on hand at ${item.location} is above the overstock line of ${round1(overstock)}.`,
       });
     }
   }
@@ -358,9 +410,7 @@ export function buildAlerts(items: InventoryItem[], now: Date = new Date()): Inv
   return alerts;
 }
 
-/**
- * Counts how many alerts of each kind exist — used by the top summary cards.
- */
+/** Counts alerts of each kind for the top summary cards. */
 export function summarizeAlertCounts(alerts: InventoryAlert[]) {
   return {
     outOfStock: alerts.filter((a) => a.kind === "out_of_stock").length,
@@ -372,155 +422,234 @@ export function summarizeAlertCounts(alerts: InventoryAlert[]) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* INVENTORY UPDATES (sales − and supplies +)                                 */
+/* FILTERING (morning review list)                                            */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Applies incoming supplies and sales to a copy of the product list.
+ * Filters the batch list for the search box and the action filter on the main page.
  *
- * ORDER OF OPERATIONS (do not change lightly):
- *   1) Incoming supplies are added to the matching product, and the newer lot's
- *      expiration date and storage condition replace the old ones. A delivery for
- *      a product that is not on the list yet becomes a new product row.
- *   2) Sales are then subtracted from what is on hand, never below zero.
+ * Action filter meanings:
+ *   needs_action   → expired, expiring soon, out of stock, or understocked
+ *                    (the default morning view — what needs a decision today)
+ *   expired / expiring_soon / out_of_stock / understocked / overstocked
+ *                  → that single problem only
+ *   healthy        → shelf life ok AND stock level healthy
+ *   all            → every batch
  *
- * Feed rows are matched to products by name (brand + product), which is the unique
- * identifier used everywhere in this app.
+ * Search matches name, location, sales channel, storage condition, or a
+ * customer location in the batch's running list.
+ */
+export function filterInventory(
+  items: InventoryItem[],
+  search: string,
+  actionFilter: ActionFilter,
+  now: Date = new Date()
+): InventoryItem[] {
+  const q = search.trim().toLowerCase();
+
+  return items.filter((item) => {
+    const expiration = classifyExpirationStatus(item, now);
+    const stock = classifyStockStatus(item);
+    const healthy = expiration === "ok" && stock === "healthy";
+
+    switch (actionFilter) {
+      case "needs_action":
+        if (!needsAction(item, now)) return false;
+        break;
+      case "expired":
+        if (expiration !== "expired") return false;
+        break;
+      case "expiring_soon":
+        if (expiration !== "expiring_soon") return false;
+        break;
+      case "out_of_stock":
+        if (stock !== "out_of_stock") return false;
+        break;
+      case "understocked":
+        if (stock !== "understocked") return false;
+        break;
+      case "overstocked":
+        if (stock !== "overstocked") return false;
+        break;
+      case "healthy":
+        if (!healthy) return false;
+        break;
+      case "all":
+        break;
+    }
+
+    if (!q) return true;
+    return (
+      item.name.toLowerCase().includes(q) ||
+      item.location.toLowerCase().includes(q) ||
+      item.salesChannel.toLowerCase().includes(q) ||
+      item.storageCondition.toLowerCase().includes(q) ||
+      item.customerLocations.some((loc) => loc.toLowerCase().includes(q))
+    );
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* UPDATES (kept for the paused Department Data Sync buttons)                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Applies incoming supplies and sales to a copy of the batch list.
+ * Matching is by brand + product name. New deliveries without a matching batch
+ * become a new batch row (location/channel default to "Unspecified" / "Retail").
  *
- * MAINTENANCE: This function does not write files. The API route that calls it is
- * responsible for saving the result back to data/inventory/inventory.csv.
+ * MAINTENANCE: Does not write files — the API route saves the result.
  */
 export function applyInventoryUpdates(
   inventory: InventoryItem[],
   sales: SalesItem[],
   incoming: IncomingItem[]
 ): InventoryItem[] {
-  // Work on copies so we never accidentally change the original list in memory.
-  const products: InventoryItem[] = inventory.map((item) => ({ ...item }));
+  const batches: InventoryItem[] = inventory.map((item) => ({
+    ...item,
+    customerLocations: [...item.customerLocations],
+  }));
 
-  /** Finds the product a feed row is talking about, ignoring upper/lower case. */
-  function findProduct(name: string): InventoryItem | undefined {
+  /** Finds a batch by its display name, ignoring upper/lower case. */
+  function findBatch(name: string): InventoryItem | undefined {
     const wanted = name.trim().toLowerCase();
-    return products.find((product) => product.name.toLowerCase() === wanted);
+    return batches.find((batch) => batch.name.toLowerCase() === wanted);
   }
 
-  // --- Step 1: add incoming supplies ---
   for (const delivery of incoming) {
-    const product = findProduct(delivery.name);
-    if (product) {
-      product.quantity += delivery.quantity;
-      product.quantityInStock = unitsOnHand(product) + delivery.quantity;
-      if (delivery.expirationDate) product.expirationDate = delivery.expirationDate;
-      if (delivery.storageCondition) product.storageCondition = delivery.storageCondition;
+    const batch = findBatch(delivery.name);
+    if (batch) {
+      batch.quantity += delivery.quantity;
+      if (delivery.expirationDate) {
+        // Keep the earlier (more urgent) expiration date.
+        if (!batch.expirationDate || delivery.expirationDate < batch.expirationDate) {
+          batch.expirationDate = delivery.expirationDate;
+        }
+      }
+      if (delivery.storageCondition) batch.storageCondition = delivery.storageCondition;
       continue;
     }
-    products.push({
-      // 0 means "not in the file yet" — the save routine appends these lines and
-      // fills in the file's Product ID column from the product name.
+
+    const location = delivery.location?.trim() || "Unspecified";
+    const salesChannel = delivery.salesChannel?.trim() || "Retail";
+    const storageCondition = delivery.storageCondition || "Unspecified";
+    const productName = delivery.name;
+    const brand = "";
+    const batchKey = [location, productName, brand, storageCondition, salesChannel].join("|");
+
+    batches.push({
+      batchKey,
       lineNumber: 0,
+      sourceRowCount: 1,
       csvProductId: "",
-      productName: delivery.name,
-      brand: "",
+      productName,
+      brand,
       name: delivery.name,
-      batchCount: 1,
+      location,
+      salesChannel,
+      storageCondition,
       quantity: delivery.quantity,
-      quantitySold: 0,
-      quantityInStock: delivery.quantity,
-      storageCondition: delivery.storageCondition || "Unspecified",
-      expirationDate: delivery.expirationDate || "",
-      recordDate: new Date().toISOString().slice(0, 10),
-      shelfLifeDays: 0,
       minimumStockThreshold: DEFAULT_MINIMUM_STOCK_THRESHOLD,
       reorderQuantity: DEFAULT_REORDER_QUANTITY,
+      expirationDate: delivery.expirationDate || "",
+      totalValue: 0,
+      approxTotalRevenue: 0,
+      pricePerUnit: 0,
+      customerLocations: [],
+      recordDate: appToday().toISOString().slice(0, 10),
     });
   }
 
-  // --- Step 2: subtract sales ---
   for (const sale of sales) {
-    const product = findProduct(sale.name);
-    // A sale for stock we do not have on record is skipped on purpose, so
-    // quantities never go negative.
-    if (!product) continue;
-    const available = unitsOnHand(product);
-    const taken = Math.min(available, sale.quantitySold);
-    product.quantityInStock = available - taken;
-    product.quantitySold += taken;
+    const batch = findBatch(sale.name);
+    if (!batch) continue;
+    // Status math ignores quantity sold, but an explicit update still reduces
+    // the Quantity column so the list stays truthful after a sync.
+    batch.quantity = Math.max(0, batch.quantity - sale.quantitySold);
   }
 
-  return products;
+  return batches;
 }
 
 /* -------------------------------------------------------------------------- */
 /* CURATED REPORT                                                             */
 /* -------------------------------------------------------------------------- */
 
-/** How urgent each status is, so the report can list the worst products first. */
-const STATUS_PRIORITY: Record<StockStatus, number> = {
+const ACTION_PRIORITY: Record<string, number> = {
   expired: 0,
   out_of_stock: 1,
   expiring_soon: 2,
   understocked: 3,
   overstocked: 4,
   healthy: 5,
+  ok: 5,
 };
 
 /**
- * Builds the curated inventory report shown after clicking "Generate report".
- * Batches are returned worst-status-first so the top of the list is the work queue.
- *
- * Today this uses rule-based cross-checks (shelf life + stock thresholds).
- * FUTURE: This is the place to plug in a real AI model that reviews trends,
- * shelf life, and reorder suggestions — keep the StockReport return shape stable
- * so the webpage does not need a redesign.
+ * Builds the curated inventory report for the operations manager.
+ * Lines are sorted worst-first so the top of the list is the morning work queue.
  */
 export function generateStockReport(items: InventoryItem[], now: Date = new Date()): StockReport {
+  const reference = appToday(now);
   const alerts = buildAlerts(items, now);
 
   const lines: StockLine[] = items
     .map((item) => {
       const days = daysUntilExpiration(item, now);
+      const expirationStatus = classifyExpirationStatus(item, now);
+      const stockStatus = classifyStockStatus(item);
       return {
         ...item,
-        status: classifyStatus(item, now),
-        // Infinity cannot travel through JSON, so a missing expiration date is
-        // reported as a large but real number of days.
+        expirationStatus,
+        stockStatus,
         daysUntilExpiration: Number.isFinite(days) ? days : 9999,
+        needsAction: needsAction(item, now),
       };
     })
-    .sort(
-      (a, b) =>
-        STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status] ||
-        a.daysUntilExpiration - b.daysUntilExpiration
-    );
+    .sort((a, b) => {
+      const aRank = Math.min(
+        ACTION_PRIORITY[a.expirationStatus] ?? 5,
+        ACTION_PRIORITY[a.stockStatus] ?? 5
+      );
+      const bRank = Math.min(
+        ACTION_PRIORITY[b.expirationStatus] ?? 5,
+        ACTION_PRIORITY[b.stockStatus] ?? 5
+      );
+      return aRank - bRank || a.daysUntilExpiration - b.daysUntilExpiration;
+    });
 
   const totals = {
     itemCount: lines.length,
-    totalUnits: Math.round(lines.reduce((sum, line) => sum + unitsOnHand(line), 0)),
-    outOfStockCount: lines.filter((l) => l.status === "out_of_stock").length,
-    understockedCount: lines.filter((l) => l.status === "understocked").length,
-    overstockedCount: lines.filter((l) => l.status === "overstocked").length,
-    expiringSoonCount: lines.filter((l) => l.status === "expiring_soon").length,
-    expiredCount: lines.filter((l) => l.status === "expired").length,
-    healthyCount: lines.filter((l) => l.status === "healthy").length,
+    totalUnits: Math.round(lines.reduce((sum, line) => sum + line.quantity, 0)),
+    outOfStockCount: lines.filter((l) => l.stockStatus === "out_of_stock").length,
+    understockedCount: lines.filter((l) => l.stockStatus === "understocked").length,
+    overstockedCount: lines.filter((l) => l.stockStatus === "overstocked").length,
+    expiringSoonCount: lines.filter((l) => l.expirationStatus === "expiring_soon").length,
+    expiredCount: lines.filter((l) => l.expirationStatus === "expired").length,
+    healthyCount: lines.filter(
+      (l) => l.expirationStatus === "ok" && l.stockStatus === "healthy"
+    ).length,
+    needsActionCount: lines.filter((l) => l.needsAction).length,
   };
 
-  const recommendations = buildRecommendations(lines, alerts);
+  const recommendations = buildRecommendations(lines);
 
   const summary = [
-    `Reviewed ${totals.itemCount.toLocaleString()} unique products (${totals.totalUnits.toLocaleString()} units still in stock).`,
-    totals.outOfStockCount > 0
-      ? `${totals.outOfStockCount} sold out.`
-      : "No sold-out products.",
-    totals.expiringSoonCount + totals.expiredCount > 0
-      ? `${totals.expiringSoonCount} expiring soon / ${totals.expiredCount} expired — act on perishables first.`
+    `Reviewed ${totals.itemCount.toLocaleString()} inventory batches (${totals.totalUnits.toLocaleString()} units) as of ${reference.toISOString().slice(0, 10)}.`,
+    totals.needsActionCount > 0
+      ? `${totals.needsActionCount} need action today.`
+      : "No urgent action items.",
+    totals.expiredCount + totals.expiringSoonCount > 0
+      ? `${totals.expiredCount} expired / ${totals.expiringSoonCount} expiring within ${EXPIRING_SOON_DAYS} days.`
       : "No immediate expiration risk.",
-    totals.understockedCount > 0
-      ? `${totals.understockedCount} under the minimum stock level.`
-      : "Minimum stock levels are currently covered.",
+    totals.understockedCount + totals.outOfStockCount > 0
+      ? `${totals.outOfStockCount} sold out / ${totals.understockedCount} under the reorder line.`
+      : "Reorder lines are currently covered.",
   ].join(" ");
 
   return {
     generatedAt: now.toISOString(),
+    referenceDate: reference.toISOString().slice(0, 10),
     summary,
     recommendations,
     totals,
@@ -529,77 +658,54 @@ export function generateStockReport(items: InventoryItem[], now: Date = new Date
   };
 }
 
-/**
- * Joins a few example names into a readable sentence fragment.
- * With many products a full list would be unreadable, so only the first
- * few are named and the rest are summarised as "+N more".
- */
+/** Joins a few example names into a short, readable sentence fragment. */
 function listSample(values: string[], limit = 6): string {
   const shown = values.slice(0, limit).join("; ");
   const hidden = values.length - limit;
   return hidden > 0 ? `${shown}; +${hidden} more` : shown;
 }
 
-/**
- * Plain-language action list for the operations manager.
- * Keep wording short — these appear as bullets under the report.
- */
-function buildRecommendations(lines: StockLine[], alerts: InventoryAlert[]): string[] {
+/** Plain-language action list for the operations manager. */
+function buildRecommendations(lines: StockLine[]): string[] {
   const tips: string[] = [];
 
-  const expired = lines.filter((l) => l.status === "expired");
+  const expired = lines.filter((l) => l.expirationStatus === "expired");
   if (expired.length > 0) {
     tips.push(
-      `Remove or markdown ${expired.length} expired product(s): ${listSample(
-        expired.map((l) => l.name)
+      `Remove or markdown ${expired.length} expired batch(es): ${listSample(
+        expired.map((l) => `${l.name} @ ${l.location}`)
       )}.`
     );
   }
 
-  const expiring = lines.filter((l) => l.status === "expiring_soon");
+  const expiring = lines.filter((l) => l.expirationStatus === "expiring_soon");
   if (expiring.length > 0) {
     tips.push(
-      `Push promotions or rotate forward ${expiring.length} product(s): ${listSample(
-        expiring.map((l) => `${l.name} (${l.daysUntilExpiration}d left)`)
+      `Push sales or rotate forward ${expiring.length} batch(es) within ${EXPIRING_SOON_DAYS} days: ${listSample(
+        expiring.map((l) => `${l.name} @ ${l.location} (${l.daysUntilExpiration}d)`)
       )}.`
     );
   }
 
   const needReorder = lines.filter(
-    (l) => l.status === "out_of_stock" || l.status === "understocked"
+    (l) => l.stockStatus === "out_of_stock" || l.stockStatus === "understocked"
   );
   if (needReorder.length > 0) {
     tips.push(
-      `Contact suppliers to restock ${needReorder.length} product(s): ${listSample(
+      `Place supplier reorders for ${needReorder.length} batch(es): ${listSample(
         needReorder.map(
-          (l) => `${l.name} (on hand ${round1(unitsOnHand(l))}, minimum ${round1(minimumStockLevel(l))})`
+          (l) =>
+            `${l.name} @ ${l.location} (on hand ${round1(l.quantity)}, reorder ${round1(l.reorderQuantity)})`
         )
       )}.`
     );
   }
 
-  const overstocked = lines.filter((l) => l.status === "overstocked");
+  const overstocked = lines.filter((l) => l.stockStatus === "overstocked");
   if (overstocked.length > 0) {
     tips.push(
-      `Slow down orders for ${overstocked.length} overstocked product(s): ${listSample(
-        overstocked.map((l) => l.name)
-      )}.`
-    );
-  }
-
-  // Trend note: products holding more stock than they can realistically sell
-  // before their expiration date, based on how fast the product has sold so far.
-  const velocityRisk = lines.filter((l) => {
-    if (l.status === "expired" || l.daysUntilExpiration <= 0) return false;
-    const onHand = unitsOnHand(l);
-    if (onHand <= 0 || l.quantitySold <= 0) return false;
-    const soldPerDay = l.quantitySold / Math.max(1, l.shelfLifeDays);
-    return soldPerDay > 0 && onHand / soldPerDay > l.daysUntilExpiration;
-  });
-  if (velocityRisk.length > 0) {
-    tips.push(
-      `Selling too slowly to clear before expiry — ${velocityRisk.length} product(s): ${listSample(
-        velocityRisk.map((l) => l.name)
+      `Review overstock / pause POs for ${overstocked.length} batch(es): ${listSample(
+        overstocked.map((l) => `${l.name} @ ${l.location}`)
       )}.`
     );
   }
@@ -608,34 +714,5 @@ function buildRecommendations(lines: StockLine[], alerts: InventoryAlert[]): str
     tips.push("Inventory looks balanced — no urgent supplier outreach required today.");
   }
 
-  // Soft cap so the UI stays readable; full alert counts remain on the cards above.
-  if (alerts.length > 12) {
-    tips.push(
-      `There are ${alerts.length.toLocaleString()} active alerts — review the alert cards above for the full picture.`
-    );
-  }
-
   return tips;
-}
-
-/**
- * Filters products for the search box and status filter on the main page.
- * Searches the product name (brand + product) and the storage condition.
- * Safe to call on every keystroke — it does not change the source data.
- */
-export function filterInventory(
-  items: InventoryItem[],
-  search: string,
-  statusFilter: "all" | StockStatus,
-  now: Date = new Date()
-): InventoryItem[] {
-  const q = search.trim().toLowerCase();
-  return items.filter((item) => {
-    if (statusFilter !== "all" && classifyStatus(item, now) !== statusFilter) return false;
-    if (!q) return true;
-    return (
-      item.name.toLowerCase().includes(q) ||
-      item.storageCondition.toLowerCase().includes(q)
-    );
-  });
 }

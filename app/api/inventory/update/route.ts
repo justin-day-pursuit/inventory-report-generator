@@ -8,11 +8,10 @@
  * IMPORTANT — this endpoint expects the feeds in the request body:
  *   { "sales": [{ name, quantitySold }],
  *     "incoming": [{ name, quantity, expirationDate, storageCondition }] }
- * `name` is the product name shown on the page — brand plus product, for example
- * "Amul Milk" — which is what identifies a product in this app.
+ * `name` is Brand + Product Name (for example "Amul Milk"). Matching is by name;
+ * location / channel on incoming rows are used only when creating a brand-new batch.
  * Both keys are optional; a missing key simply means "nothing to apply".
- * The feeds are NOT read from the CSV automatically, because the CSV already
- * contains the sold quantities — re-applying them would double-count sales.
+ * The feeds are NOT read from the CSV automatically.
  *
  * NOTE: The "Update current inventory" button on the main page is currently
  * switched off (its onClick is commented out in app/page.tsx), so nothing in the

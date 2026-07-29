@@ -2,20 +2,9 @@
  * ============================================================================
  * CHECK SALES DATA PAGE (app/check/sales/page.tsx)
  * ============================================================================
- * WHAT THIS PAGE IS FOR:
- * A read-only list of how much of each product batch has already sold. It reads
- * /api/sales, which builds the list from the "Quantity Sold (liters/kg)" column of
- * data/inventory/inventory.csv.
- *
- * HOW TO REACH IT:
- * Open /check/sales directly. The "Check sales data" button on the main page is
- * currently switched off (see app/page.tsx), so it no longer opens this tab.
- *
- * HOW TO MAINTAIN:
- * - Column labels must stay aligned with the fields /api/sales returns:
- *   name (brand + product) and quantitySold.
- * - The dataset holds thousands of rows, so the API returns the first 500 by
- *   default. Use /api/sales?limit=all to fetch every row.
+ * Read-only list of inventory batches from /api/sales.
+ * Quantity Sold is currently ignored for calculations, so sold amounts show as 0.
+ * The "Check sales data" button on the main page is switched off.
  * ============================================================================
  */
 
@@ -64,6 +53,9 @@ export default function CheckSalesPage() {
             Read-only view of <code className="font-mono text-sm">data/inventory/inventory.csv</code>
             {loadedAt ? ` · loaded ${new Date(loadedAt).toLocaleString()}` : ""}
           </p>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            Quantity Sold is ignored for status calculations right now, so sold amounts show as 0.
+          </p>
         </div>
         <ThemeToggle />
       </header>
@@ -77,7 +69,7 @@ export default function CheckSalesPage() {
       <div className="inventory-shell" style={{ maxHeight: "75vh" }}>
         <div className="inventory-toolbar">
           <p className="text-sm text-[var(--muted)]">
-            {items.length.toLocaleString()} of {total.toLocaleString()} sale row(s)
+            {items.length.toLocaleString()} of {total.toLocaleString()} batch(es)
           </p>
         </div>
         <div className="inventory-scroll">
@@ -92,7 +84,7 @@ export default function CheckSalesPage() {
               {items.length === 0 ? (
                 <tr>
                   <td colSpan={2} className="px-4 py-8 text-center text-[var(--muted)]">
-                    No sold quantities found in data/inventory/inventory.csv.
+                    No batches found in data/inventory/inventory.csv.
                   </td>
                 </tr>
               ) : (

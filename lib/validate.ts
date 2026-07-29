@@ -2,11 +2,12 @@
  * ============================================================================
  * REQUEST VALIDATION (lib/validate.ts)
  * ============================================================================
- * Light schema checks for data that arrives through the API (for example a sales
- * export posted by another system). Bad payloads are rejected with a clear
- * message so wrong numbers can never reach data/inventory/inventory.csv.
+ * Light schema checks for data that arrives through the API. Bad payloads are
+ * rejected with a clear message so wrong numbers can never reach
+ * data/inventory/inventory.csv.
  *
- * Field names here match the fields in lib/inventory.ts, not the CSV headings.
+ * Field names here match lib/inventory.ts (not the CSV headings).
+ * A product / batch is identified by its name — Brand + Product Name.
  * ============================================================================
  */
 
@@ -55,8 +56,7 @@ export function parseSalesItems(value: unknown): SalesItem[] {
 }
 
 /**
- * Validates a posted receiving feed: one arriving batch per row, matched to a
- * product by its name (brand + product).
+ * Validates a posted receiving feed: one arriving batch per row, matched by name.
  */
 export function parseIncomingItems(value: unknown): IncomingItem[] {
   if (!Array.isArray(value)) {
@@ -76,14 +76,20 @@ export function parseIncomingItems(value: unknown): IncomingItem[] {
     if (quantity < 0) {
       throw new Error(`incoming[${index}] quantity must be >= 0.`);
     }
-    return { name, quantity, expirationDate, storageCondition };
+    return {
+      name,
+      quantity,
+      expirationDate,
+      storageCondition,
+      location: asString(row.location) ?? undefined,
+      salesChannel: asString(row.salesChannel) ?? undefined,
+    };
   });
 }
 
 /**
- * Validates a posted list of products (used by POST /api/report when a caller
+ * Validates a posted list of batches (used by POST /api/report when a caller
  * wants a report on its own snapshot instead of the saved file).
- * Optional fields fall back to sensible values so a short payload still works.
  */
 export function parseInventoryItems(value: unknown): InventoryItem[] {
   if (!Array.isArray(value)) {
@@ -96,25 +102,39 @@ export function parseInventoryItems(value: unknown): InventoryItem[] {
     if (!name || quantity === null) {
       throw new Error(`items[${index}] requires at least name and quantity (number).`);
     }
-    const quantitySold = asNumber(row.quantitySold) ?? 0;
-    const quantityInStock = asNumber(row.quantityInStock) ?? quantity - quantitySold;
+
+    const brand = asString(row.brand) ?? "";
+    const productName = asString(row.productName) ?? name;
+    const location = asString(row.location) ?? "Unspecified";
+    const salesChannel = asString(row.salesChannel) ?? "Unspecified";
+    const storageCondition = asString(row.storageCondition) ?? "Unspecified";
 
     return {
+      batchKey:
+        asString(row.batchKey) ??
+        [location, productName, brand, storageCondition, salesChannel]
+          .map((part) => part.toLowerCase())
+          .join("|"),
       lineNumber: asNumber(row.lineNumber) ?? 0,
+      sourceRowCount: asNumber(row.sourceRowCount) ?? 1,
       csvProductId: asString(row.csvProductId) ?? "",
-      productName: asString(row.productName) ?? name,
-      brand: asString(row.brand) ?? "",
+      productName,
+      brand,
       name,
-      batchCount: asNumber(row.batchCount) ?? 1,
+      location,
+      salesChannel,
+      storageCondition,
       quantity,
-      quantitySold,
-      quantityInStock,
-      storageCondition: asString(row.storageCondition) ?? "Unspecified",
-      expirationDate: asString(row.expirationDate) ?? "",
-      recordDate: asString(row.recordDate) ?? "",
-      shelfLifeDays: asNumber(row.shelfLifeDays) ?? 0,
       minimumStockThreshold: asNumber(row.minimumStockThreshold) ?? 0,
       reorderQuantity: asNumber(row.reorderQuantity) ?? 0,
+      expirationDate: asString(row.expirationDate) ?? "",
+      totalValue: asNumber(row.totalValue) ?? 0,
+      approxTotalRevenue: asNumber(row.approxTotalRevenue) ?? 0,
+      pricePerUnit: asNumber(row.pricePerUnit) ?? 0,
+      customerLocations: Array.isArray(row.customerLocations)
+        ? row.customerLocations.map(String)
+        : [],
+      recordDate: asString(row.recordDate) ?? "",
     };
   });
 }

@@ -3,14 +3,11 @@
  * API: GET /api/report  (also accepts POST)
  * ============================================================================
  * Builds the curated stock report from data/inventory/inventory.csv, or from a
- * validated `items` array in the POST body when another system wants a report on
- * its own snapshot.
+ * validated `items` array in the POST body.
  *
- * WHY THE RESPONSE IS TRIMMED:
- * The totals and recommendations always cover every product, but only the most
- * urgent lines (worst status first) and a short alert preview are sent to the
- * browser so the page stays fast even if the dataset grows.
- * `lineTotal` and `alertTotal` report the real numbers.
+ * Totals and recommendations always cover every batch; only the most urgent lines
+ * and a short alert preview are sent to the browser. `lineTotal` / `alertTotal`
+ * report the real numbers.
  * ============================================================================
  */
 
@@ -19,10 +16,7 @@ import { readInventory } from "@/lib/data-store";
 import { generateStockReport, type InventoryItem } from "@/lib/inventory";
 import { parseInventoryItems } from "@/lib/validate";
 
-/** How many report rows are sent to the browser (already sorted worst-first). */
 const LINE_LIMIT = 200;
-
-/** How many individual alerts are sent with the report. */
 const ALERT_PREVIEW_LIMIT = 100;
 
 export const dynamic = "force-dynamic";

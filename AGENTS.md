@@ -8,12 +8,13 @@ This is a Next.js 16 (App Router, Turbopack) + React 19 + TypeScript + Tailwind 
 - Lint: `npm run lint` (`eslint .` with flat `eslint.config.mjs`). CI: `npm run ci`.
 - Build: `npm run build` with `output: "standalone"` in `next.config.mjs`. Security response headers are configured there.
 - Health: `GET /api/health`.
-- Core logic: `lib/inventory.ts` (status/alerts/report), `lib/data-store.ts` (CSV I/O + column map), `lib/csv.ts` (CSV parse/serialize), `lib/validate.ts` (API validation).
+- Core logic: `lib/inventory.ts` (expiration/stock status, action filters, alerts, report), `lib/data-store.ts` (CSV I/O + batch aggregation), `lib/csv.ts` (CSV parse/serialize), `lib/validate.ts` (API validation).
 - Data files:
-  - `data/inventory/inventory.csv` — live dairy dataset, one line per product batch (writable by update)
-  - Products are identified by name (`Brand` + `Product Name`, e.g. "Amul Milk"), which is unique in this dataset; `Product ID` is shared by all brands of a product, is not displayed, and is only preserved on write via `csvProductId`.
-  - Display groups the batch lines into 40 unique products, each showing its newest record.
-  - `data/inventory/inventory.seed.csv` — untouched original dataset; `npm run restore:inventory`
-  - Columns used by the app: `Product ID`, `Product Name`, `Brand`, `Quantity (liters/kg)`, `Quantity Sold (liters/kg)`, `Quantity in Stock (liters/kg)`, `Storage Condition`, `Expiration Date`, `Date`, `Shelf Life (days)`, `Minimum Stock Threshold (liters/kg)`, `Reorder Quantity (liters/kg)`
+  - `data/inventory/inventory.csv` — live dairy dataset (writable by update)
+  - `data/inventory/inventory.seed.csv` — untouched original; `npm run restore:inventory`
+  - Batches = unique `Location` + `Product Name` + `Brand` + `Storage Condition` + `Sales Channel`. Quantity / min threshold / reorder qty / money totals are summed; expiration is earliest of `min(Expiration Date, Production Date + Shelf Life)`; customer locations are a running list.
+  - Status clock: `APP_REFERENCE_DATE` (`2018-11-20`) near earliest expiration for testing; `Quantity Sold` and `Quantity in Stock` ignored for status math.
+  - Display columns: Name (Brand + Product Name), Location, Sales Channel, Storage Conditions, Quantity, Expiration, Expiration Status, Stock Status. Default filter: Needs action.
+  - Full CSV columns available: Location, Total Land Area (acres), Number of Cows, Farm Size, Date, Product ID, Product Name, Brand, Quantity (liters/kg), Price per Unit, Total Value, Shelf Life (days), Storage Condition, Production Date, Expiration Date, Quantity Sold (liters/kg), Price per Unit (sold), Approx. Total Revenue(INR), Customer Location, Sales Channel, Quantity in Stock (liters/kg), Minimum Stock Threshold (liters/kg), Reorder Quantity (liters/kg).
   - `/api/sales` and `/api/incoming` are read-only views derived from that CSV (no separate feed files)
 - Persist `data/` on deploy hosts; file writes will not stick on ephemeral serverless FS without external storage.

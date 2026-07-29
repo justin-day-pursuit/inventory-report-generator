@@ -4,44 +4,32 @@
  * ============================================================================
  * WHAT THIS FILE IS FOR:
  * Reads (and saves) the dairy inventory spreadsheet. This is the ONLY file that
- * knows the real column names inside the CSV — everything else in the app works
- * with the tidy field names defined in lib/inventory.ts.
+ * knows the real CSV column names. Everything else in the app works with the tidy
+ * field names defined in lib/inventory.ts.
  *
- * FOLDER MAP (do not rename without updating the paths below):
- *   data/inventory/inventory.csv       → live stock, one line per product batch
- *   data/inventory/inventory.seed.csv  → untouched original dataset.
- *                                        Restore with: npm run restore:inventory
+ * FOLDER MAP:
+ *   data/inventory/inventory.csv       → live stock (writable)
+ *   data/inventory/inventory.seed.csv  → untouched original — npm run restore:inventory
  *
- * HOW PRODUCTS ARE IDENTIFIED (important):
- * The spreadsheet stores history — the same product appears on hundreds of lines,
- * one per batch — and its "Product ID" column is not a unique identifier: the same
- * id is shared by every brand of that product (id 1 covers Amul Milk, Sudha Milk,
- * Raj Milk and Mother Dairy Milk). What IS unique in this file is BRAND + PRODUCT
- * NAME, so that combined name is what identifies a product throughout the app.
+ * HOW BATCHES ARE BUILT (unique identifier):
+ * CSV lines that share ALL of these are rolled into one batch:
+ *   Location + Product Name + Brand + Storage Condition + Sales Channel
  *
- * The lines are grouped by that name and only the newest record of each product is
- * shown. Because a row comes from a single line, every value on it (brand, product
- * name, quantity, sold, storage condition, expiration date) belongs together.
+ * For each batch we compute:
+ *   Quantity, Minimum Stock Threshold, Reorder Quantity, Total Value,
+ *     Approx. Total Revenue  → SUM of the source lines
+ *   Price per Unit           → quantity-weighted AVERAGE (summing unit prices
+ *                               would be meaningless)
+ *   Expiration Date          → earliest of each line's
+ *                               min(Expiration Date, Production Date + Shelf Life)
+ *   Customer Locations       → running list of distinct Customer Location values
+ *   Location / Sales Channel / Storage / Brand / Product Name
+ *                            → the shared key values (identical across the lines)
  *
- * COLUMN MAP (CSV column → field used in the app):
- *   Brand + Product Name                  → name (the unique product, shown as "Name")
- *   Product ID                            → csvProductId — NOT an identifier; kept
- *                                           only so saves preserve that column
- *   Quantity (liters/kg)                  → quantity
- *   Quantity Sold (liters/kg)             → quantitySold
- *   Quantity in Stock (liters/kg)         → quantityInStock (what is left on hand)
- *   Storage Condition                     → storageCondition
- *   Expiration Date                       → expirationDate
- *   Date                                  → recordDate  (day the batch was recorded)
- *   Shelf Life (days)                     → shelfLifeDays
- *   Minimum Stock Threshold (liters/kg)   → minimumStockThreshold
- *   Reorder Quantity (liters/kg)          → reorderQuantity
- * Every other column in the file is kept as-is and written back untouched.
+ * Quantity Sold and Quantity in Stock are read from the file when present but
+ * are NOT used for batch math or status — see lib/inventory.ts.
  *
- * DEPLOYMENT:
- * - On Docker/VM hosts, mount a persistent volume at /app/data so inventory
- *   updates survive redeploys (see Dockerfile / README).
- * - Ephemeral serverless filesystems will lose writes; use an external DB/API then.
+ * DEPLOYMENT: mount a persistent volume at /app/data so writes survive redeploys.
  * ============================================================================
  */
 
@@ -50,7 +38,6 @@ import path from "path";
 import { parseCsv, serializeCsv, type CsvTable } from "./csv";
 import type { IncomingItem, InventoryItem, SalesItem } from "./inventory";
 
-/** Absolute paths to the inventory data folder and its two files. */
 const DATA_ROOT = path.join(process.cwd(), "data");
 
 export const DATA_PATHS = {
@@ -62,76 +49,191 @@ export const DATA_PATHS = {
 /** Where the page tells the user its numbers come from. */
 export const INVENTORY_SOURCE = "data/inventory/inventory.csv";
 
-/** Exact column headings used by the dataset. Change these if the export changes. */
+/**
+ * Exact CSV column headings used by the dataset.
+ * Change these strings only if the export's header row changes.
+ */
 export const CSV_COLUMNS = {
+  location: "Location",
   productId: "Product ID",
   productName: "Product Name",
   brand: "Brand",
   quantity: "Quantity (liters/kg)",
-  quantitySold: "Quantity Sold (liters/kg)",
-  quantityInStock: "Quantity in Stock (liters/kg)",
-  storageCondition: "Storage Condition",
-  expirationDate: "Expiration Date",
-  recordDate: "Date",
+  pricePerUnit: "Price per Unit",
+  totalValue: "Total Value",
   shelfLifeDays: "Shelf Life (days)",
+  storageCondition: "Storage Condition",
+  productionDate: "Production Date",
+  expirationDate: "Expiration Date",
+  quantitySold: "Quantity Sold (liters/kg)",
+  approxTotalRevenue: "Approx. Total Revenue(INR)",
+  customerLocation: "Customer Location",
+  salesChannel: "Sales Channel",
+  quantityInStock: "Quantity in Stock (liters/kg)",
   minimumStockThreshold: "Minimum Stock Threshold (liters/kg)",
   reorderQuantity: "Reorder Quantity (liters/kg)",
+  recordDate: "Date",
 } as const;
 
-/** Reads a text value from a row and turns it into a number (0 when unreadable). */
+/** Reads a text value from a row and turns it into a number (0 when unusable). */
 function toNumber(value: string | undefined): number {
   if (!value) return 0;
   const parsed = Number(value.replaceAll(",", "").trim());
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-/** Keeps only the YYYY-MM-DD part of a date cell (some exports append a time). */
+/** Keeps only the YYYY-MM-DD part of a date cell. */
 function toDateText(value: string | undefined): string {
   return (value ?? "").trim().slice(0, 10);
 }
 
-/** Builds the "Name" column shown on the page: brand first, then product name. */
+/** Builds the Name column: brand first, then product name. */
 function buildDisplayName(brand: string, productName: string): string {
   return [brand.trim(), productName.trim()].filter(Boolean).join(" ") || "Unnamed product";
 }
 
 /**
- * Turns one CSV line into the tidy object the rest of the app uses.
- * `lineNumber` is 1 for the first data line (the line right after the header).
+ * Builds the unique batch key from the five fields that identify a batch.
+ * Order is fixed so the same combination always hashes to the same string.
  */
-function toInventoryItem(row: Record<string, string>, lineNumber: number): InventoryItem {
-  const csvProductId = (row[CSV_COLUMNS.productId] ?? "").trim();
-  const productName = (row[CSV_COLUMNS.productName] ?? "").trim();
-  const brand = (row[CSV_COLUMNS.brand] ?? "").trim();
-  const quantity = toNumber(row[CSV_COLUMNS.quantity]);
-  const quantitySold = toNumber(row[CSV_COLUMNS.quantitySold]);
-  const inStockCell = row[CSV_COLUMNS.quantityInStock];
+export function buildBatchKey(
+  location: string,
+  productName: string,
+  brand: string,
+  storageCondition: string,
+  salesChannel: string
+): string {
+  return [location, productName, brand, storageCondition, salesChannel]
+    .map((part) => part.trim().toLowerCase())
+    .join("|");
+}
 
+/**
+ * Effective expiration for one CSV line: whichever comes first —
+ * the printed Expiration Date, or Production Date + Shelf Life (days).
+ * Returns "" when neither side can be worked out.
+ */
+export function effectiveExpirationForRow(row: Record<string, string>): string {
+  const expiration = toDateText(row[CSV_COLUMNS.expirationDate]);
+  const production = toDateText(row[CSV_COLUMNS.productionDate]);
+  const shelfDays = toNumber(row[CSV_COLUMNS.shelfLifeDays]);
+
+  let fromShelf = "";
+  if (production && shelfDays >= 0) {
+    const produced = new Date(`${production}T00:00:00`);
+    if (!Number.isNaN(produced.getTime())) {
+      produced.setDate(produced.getDate() + Math.round(shelfDays));
+      fromShelf = produced.toISOString().slice(0, 10);
+    }
+  }
+
+  if (expiration && fromShelf) return expiration <= fromShelf ? expiration : fromShelf;
+  return expiration || fromShelf;
+}
+
+/** One CSV line after light parsing — only used while building batches. */
+type SourceRow = {
+  lineNumber: number;
+  raw: Record<string, string>;
+  location: string;
+  productName: string;
+  brand: string;
+  storageCondition: string;
+  salesChannel: string;
+  csvProductId: string;
+  quantity: number;
+  minimumStockThreshold: number;
+  reorderQuantity: number;
+  totalValue: number;
+  approxTotalRevenue: number;
+  pricePerUnit: number;
+  customerLocation: string;
+  recordDate: string;
+  effectiveExpiration: string;
+};
+
+/** Turns one spreadsheet line into the temporary SourceRow shape. */
+function toSourceRow(row: Record<string, string>, lineNumber: number): SourceRow {
   return {
     lineNumber,
-    csvProductId,
-    productName,
-    brand,
-    // Brand + product name — this is what identifies the product everywhere.
-    name: buildDisplayName(brand, productName),
-    // Filled in when the lines are grouped per product (see readInventory).
-    batchCount: 1,
-    quantity,
-    quantitySold,
-    // When the "Quantity in Stock" cell is blank, fall back to quantity − sold.
-    quantityInStock: inStockCell?.trim() ? toNumber(inStockCell) : quantity - quantitySold,
+    raw: row,
+    location: (row[CSV_COLUMNS.location] ?? "").trim() || "Unspecified",
+    productName: (row[CSV_COLUMNS.productName] ?? "").trim(),
+    brand: (row[CSV_COLUMNS.brand] ?? "").trim(),
     storageCondition: (row[CSV_COLUMNS.storageCondition] ?? "").trim() || "Unspecified",
-    expirationDate: toDateText(row[CSV_COLUMNS.expirationDate]),
-    recordDate: toDateText(row[CSV_COLUMNS.recordDate]),
-    shelfLifeDays: toNumber(row[CSV_COLUMNS.shelfLifeDays]),
+    salesChannel: (row[CSV_COLUMNS.salesChannel] ?? "").trim() || "Unspecified",
+    csvProductId: (row[CSV_COLUMNS.productId] ?? "").trim(),
+    quantity: toNumber(row[CSV_COLUMNS.quantity]),
     minimumStockThreshold: toNumber(row[CSV_COLUMNS.minimumStockThreshold]),
     reorderQuantity: toNumber(row[CSV_COLUMNS.reorderQuantity]),
+    totalValue: toNumber(row[CSV_COLUMNS.totalValue]),
+    approxTotalRevenue: toNumber(row[CSV_COLUMNS.approxTotalRevenue]),
+    pricePerUnit: toNumber(row[CSV_COLUMNS.pricePerUnit]),
+    customerLocation: (row[CSV_COLUMNS.customerLocation] ?? "").trim(),
+    recordDate: toDateText(row[CSV_COLUMNS.recordDate]),
+    effectiveExpiration: effectiveExpirationForRow(row),
+  };
+}
+
+/**
+ * Rolls a group of source rows that share the same batch key into one
+ * InventoryItem, applying the sum / earliest-date / running-list rules.
+ */
+function aggregateBatch(rows: SourceRow[]): InventoryItem {
+  // Newest recording date wins for metadata we keep from a single line
+  // (product id, and the line number used if we write the batch back).
+  const newest = rows.reduce((best, row) => {
+    if (!best) return row;
+    if (row.recordDate !== best.recordDate) {
+      return row.recordDate > best.recordDate ? row : best;
+    }
+    return row.lineNumber > best.lineNumber ? row : best;
+  });
+
+  const quantity = rows.reduce((sum, row) => sum + row.quantity, 0);
+  const priceWeight = rows.reduce((sum, row) => sum + row.pricePerUnit * row.quantity, 0);
+
+  const customerLocations = Array.from(
+    new Set(rows.map((row) => row.customerLocation).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
+  // Earliest effective expiration across the group = most urgent date to act on.
+  const expirationDate = rows
+    .map((row) => row.effectiveExpiration)
+    .filter(Boolean)
+    .sort()[0] ?? "";
+
+  return {
+    batchKey: buildBatchKey(
+      newest.location,
+      newest.productName,
+      newest.brand,
+      newest.storageCondition,
+      newest.salesChannel
+    ),
+    lineNumber: newest.lineNumber,
+    sourceRowCount: rows.length,
+    csvProductId: newest.csvProductId,
+    productName: newest.productName,
+    brand: newest.brand,
+    name: buildDisplayName(newest.brand, newest.productName),
+    location: newest.location,
+    salesChannel: newest.salesChannel,
+    storageCondition: newest.storageCondition,
+    quantity,
+    minimumStockThreshold: rows.reduce((sum, row) => sum + row.minimumStockThreshold, 0),
+    reorderQuantity: rows.reduce((sum, row) => sum + row.reorderQuantity, 0),
+    expirationDate,
+    totalValue: rows.reduce((sum, row) => sum + row.totalValue, 0),
+    approxTotalRevenue: rows.reduce((sum, row) => sum + row.approxTotalRevenue, 0),
+    pricePerUnit: quantity > 0 ? priceWeight / quantity : 0,
+    customerLocations,
+    recordDate: newest.recordDate,
   };
 }
 
 /**
  * Reads the raw spreadsheet (all columns, values as text).
- * Used by the save routine so untouched columns survive a write.
  * A missing file is treated as "no data yet" instead of a crash.
  */
 export async function readInventoryTable(): Promise<CsvTable> {
@@ -146,68 +248,64 @@ export async function readInventoryTable(): Promise<CsvTable> {
   }
 }
 
-/** Loads every single line of the spreadsheet, one object per batch. */
-export async function readInventoryBatches(): Promise<InventoryItem[]> {
-  const table = await readInventoryTable();
-  return table.rows.map((row, index) => toInventoryItem(row, index + 1));
-}
-
-/** True when batch `a` is a more recent record than batch `b`. */
-function isNewerRecord(a: InventoryItem, b: InventoryItem): boolean {
-  if (a.recordDate !== b.recordDate) return a.recordDate > b.recordDate;
-  // Same date on both lines: the one further down the file wins.
-  return a.lineNumber > b.lineNumber;
-}
-
 /**
- * Loads the list of UNIQUE products shown on the page.
+ * Loads the inventory as UNIQUE BATCHES for the coordinator list.
  *
- * The spreadsheet holds history (hundreds of batch lines per product), so the
- * lines are grouped by product name (brand + product) and each product is
- * represented by its newest record. `batchCount` says how many lines that product
- * has in the file. Products come back in alphabetical order by name, which is the
- * order shown in the Name column.
+ * Steps:
+ *   1) Read every CSV line
+ *   2) Group by Location + Product Name + Brand + Storage Condition + Sales Channel
+ *   3) Sum / earliest-date / running-list as documented at the top of this file
+ *   4) Sort by name, then location, then sales channel for a stable table order
  */
 export async function readInventory(): Promise<InventoryItem[]> {
-  const batches = await readInventoryBatches();
-  const newestPerProduct = new Map<string, InventoryItem>();
+  const table = await readInventoryTable();
+  const groups = new Map<string, SourceRow[]>();
 
-  for (const batch of batches) {
-    // Upper/lower case differences between lines must not create two products.
-    const key = batch.name.toLowerCase();
-    const known = newestPerProduct.get(key);
-    if (!known) {
-      newestPerProduct.set(key, { ...batch });
-      continue;
-    }
-    known.batchCount += 1;
-    if (isNewerRecord(batch, known)) {
-      // Keep the running batch count while switching to the newer record.
-      newestPerProduct.set(key, { ...batch, batchCount: known.batchCount });
-    }
-  }
+  table.rows.forEach((row, index) => {
+    const source = toSourceRow(row, index + 1);
+    const key = buildBatchKey(
+      source.location,
+      source.productName,
+      source.brand,
+      source.storageCondition,
+      source.salesChannel
+    );
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(source);
+    else groups.set(key, [source]);
+  });
 
-  return Array.from(newestPerProduct.values()).sort((a, b) => a.name.localeCompare(b.name));
+  return Array.from(groups.values())
+    .map(aggregateBatch)
+    .sort(
+      (a, b) =>
+        a.name.localeCompare(b.name) ||
+        a.location.localeCompare(b.location) ||
+        a.salesChannel.localeCompare(b.salesChannel)
+    );
 }
 
 /**
- * Sales department feed, derived from the inventory spreadsheet:
- * how much of each product has sold on its newest record
- * ("Quantity Sold (liters/kg)"). Products that have not sold anything are left out.
+ * Sales department view derived from the inventory spreadsheet.
+ * One row per batch, using the batch's summed Quantity as a stand-in sold figure
+ * is intentionally NOT done — Quantity Sold is ignored for now, so this feed
+ * simply lists each batch name with quantitySold: 0 until a real sales feed returns.
+ *
+ * Kept so /api/sales and the check page keep working while sync is paused.
  */
 export async function readSales(): Promise<SalesItem[]> {
   const items = await readInventory();
-  return items
-    .filter((item) => item.quantitySold > 0)
-    .map((item) => ({
-      name: item.name,
-      quantitySold: item.quantitySold,
-    }));
+  // Surface each batch so the check page is not empty; sold amount stays 0
+  // because Quantity Sold is out of scope for calculations right now.
+  return items.map((item) => ({
+    name: item.name,
+    quantitySold: 0,
+  }));
 }
 
 /**
- * Receiving feed, derived from the inventory spreadsheet: the newest received
- * batch of each product — how much arrived, when it expires, how it is stored.
+ * Receiving view derived from the inventory spreadsheet: each batch as it stands
+ * (quantity, expiration, storage). Used by /api/incoming.
  */
 export async function readIncoming(): Promise<IncomingItem[]> {
   const items = await readInventory();
@@ -216,6 +314,8 @@ export async function readIncoming(): Promise<IncomingItem[]> {
     quantity: item.quantity,
     expirationDate: item.expirationDate,
     storageCondition: item.storageCondition,
+    location: item.location,
+    salesChannel: item.salesChannel,
   }));
 }
 
@@ -226,9 +326,8 @@ function toCell(value: number): string {
 }
 
 /**
- * Writes a number into a cell, but only when the value really changed.
- * This keeps cells such as "959.1" exactly as the file had them instead of
- * rewriting them as "959.10" on every save.
+ * Writes a number into a cell only when the value really changed, so untouched
+ * formatting (for example "959.1") is not rewritten as "959.10" on every save.
  */
 function setNumberCell(row: Record<string, string>, column: string, value: number): void {
   const current = row[column];
@@ -236,20 +335,15 @@ function setNumberCell(row: Record<string, string>, column: string, value: numbe
   row[column] = toCell(value);
 }
 
-/** Writes text into a cell, but only when the value really changed. */
+/** Writes text into a cell only when the value really changed. */
 function setTextCell(row: Record<string, string>, column: string, value: string): void {
   if (row[column] === value) return;
   row[column] = value;
 }
 
 /**
- * Works out how a brand-new product should be written into the spreadsheet.
- *
- * A delivery only carries the full name ("Nestle Milk"). The file keeps brand and
- * product name in separate columns and numbers each product, so this looks for a
- * product name the file already knows ("Milk") at the end of the new name and, when
- * it finds one, splits the name and reuses that product's number. If nothing
- * matches, the name is written as-is and the number is left for someone to fill in.
+ * Looks up how a brand-new product should be split into Brand / Product Name /
+ * Product ID columns when appending a line the file has never seen.
  */
 function describeNewProduct(
   table: CsvTable,
@@ -282,9 +376,12 @@ function describeNewProduct(
 }
 
 /**
- * Copies the app's fields back onto a spreadsheet row, leaving other columns alone.
- * The "Product ID" cell keeps the file's own value; the app never identifies
- * products by it (brand + product name does that), it only preserves the column.
+ * Copies the batch's fields onto one spreadsheet row (the newest source line).
+ * Only the cells this app manages are touched; every other column is left alone.
+ *
+ * NOTE: A batch is a SUM of several lines. Writing the summed Quantity back onto
+ * a single line is a lossy simplification used only when the paused Update flow
+ * is re-enabled. Restoring from inventory.seed.csv undoes that.
  */
 function writeItemIntoRow(
   row: Record<string, string>,
@@ -294,25 +391,20 @@ function writeItemIntoRow(
   setTextCell(row, CSV_COLUMNS.productId, csvProductId);
   setTextCell(row, CSV_COLUMNS.productName, item.productName);
   setTextCell(row, CSV_COLUMNS.brand, item.brand);
-  setNumberCell(row, CSV_COLUMNS.quantity, item.quantity);
-  setNumberCell(row, CSV_COLUMNS.quantitySold, item.quantitySold);
-  setNumberCell(row, CSV_COLUMNS.quantityInStock, item.quantityInStock);
+  setTextCell(row, CSV_COLUMNS.location, item.location);
+  setTextCell(row, CSV_COLUMNS.salesChannel, item.salesChannel);
   setTextCell(row, CSV_COLUMNS.storageCondition, item.storageCondition);
-  setTextCell(row, CSV_COLUMNS.expirationDate, item.expirationDate);
-  setTextCell(row, CSV_COLUMNS.recordDate, item.recordDate);
-  setNumberCell(row, CSV_COLUMNS.shelfLifeDays, item.shelfLifeDays);
+  setNumberCell(row, CSV_COLUMNS.quantity, item.quantity);
   setNumberCell(row, CSV_COLUMNS.minimumStockThreshold, item.minimumStockThreshold);
   setNumberCell(row, CSV_COLUMNS.reorderQuantity, item.reorderQuantity);
+  setTextCell(row, CSV_COLUMNS.expirationDate, item.expirationDate);
+  setTextCell(row, CSV_COLUMNS.recordDate, item.recordDate);
 }
 
 /**
- * Saves updated products back to data/inventory/inventory.csv.
- *
- * HOW IT KEEPS THE FILE INTACT:
- * - It re-reads the file first, then only overwrites the cells this app manages,
- *   so extra columns (prices, farm details, locations…) are never lost.
- * - Each product is written back onto the line it was read from (its newest
- *   record). Products with lineNumber 0 are new deliveries and become new lines.
+ * Saves updated batches back to data/inventory/inventory.csv.
+ * Existing batches are written onto their newest source line; brand-new batches
+ * (lineNumber 0) are appended as new lines.
  */
 export async function writeInventory(items: InventoryItem[]): Promise<void> {
   const table = await readInventoryTable();
@@ -324,16 +416,19 @@ export async function writeInventory(items: InventoryItem[]): Promise<void> {
       writeItemIntoRow(existingRow, item, item.csvProductId);
       continue;
     }
+
     const newRow: Record<string, string> = {};
     header.forEach((column) => {
       newRow[column] = "";
     });
-    // A brand-new product still has to fit the file's shape: brand and product
-    // name in their own columns, and the number the file uses for that product.
     const placement = describeNewProduct(table, item.name);
     writeItemIntoRow(
       newRow,
-      { ...item, brand: placement.brand, productName: placement.productName },
+      {
+        ...item,
+        brand: item.brand || placement.brand,
+        productName: item.productName || placement.productName,
+      },
       item.csvProductId || placement.csvProductId
     );
     table.rows.push(newRow);

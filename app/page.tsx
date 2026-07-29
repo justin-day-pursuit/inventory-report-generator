@@ -3,31 +3,35 @@
  * MAIN MONITORING PAGE (app/page.tsx)
  * ============================================================================
  * WHAT THIS PAGE IS FOR:
- * Day-to-day inventory coordinator workspace. Top-to-bottom layout:
+ * Morning workbench for the inventory coordinator. Top-to-bottom:
  *   1) Alert summary cards (sold out, understocked, overstocked, expiring, expired)
- *   2) Inventory list with sticky search/filter, its own scroll area and a pager
- *   3) Department data sync panel (currently switched off — see the note below)
- *   4) Generate a curated stock report
+ *   2) Batch list focused on what needs action today
+ *   3) Department data sync panel (currently switched off)
+ *   4) Curated stock report for the operations manager
  *
  * WHERE THE ROWS COME FROM:
- * data/inventory/inventory.csv, served by /api/inventory. The spreadsheet keeps a
- * line per batch, so it is grouped into unique products first: one row per product,
- * showing that product's newest record. The table
- * columns match the spreadsheet columns:
- *   Name (Brand + Product Name) · Quantity (liters/kg) ·
- *   Quantity Sold (liters/kg) · Storage Conditions · Expiration Date · Status
- * "Status" is worked out by the app (see classifyStatus in lib/inventory.ts).
- * A product is identified by its name — brand plus product name — because the
- * dataset's "Product ID" column is shared by every brand of a product.
+ * data/inventory/inventory.csv, served by /api/inventory. Lines that share the same
+ * Location + Product Name + Brand + Storage Condition + Sales Channel are rolled
+ * into one BATCH. Quantity and thresholds are summed; expiration is the earliest
+ * of (Expiration Date) and (Production Date + Shelf Life) across the group.
  *
- * HOW TO MAINTAIN (non-technical):
- * - To change how many rows appear per page by default, edit DEFAULT_PAGE_SIZE
- *   below. To offer different choices in the "Show" dropdown, edit PAGE_SIZE_OPTIONS.
- * - The three sync buttons (load sales, check feeds, update inventory) are
- *   intentionally inactive: their onClick lines are commented out. Search this file
- *   for "SWITCHED OFF" to find them and how to switch them back on.
- * - Button labels can be reworded carefully; keep the remaining onClick handlers
- *   (Refresh, Generate report) attached.
+ * COLUMNS SHOWN:
+ *   Name (Brand + Product Name) · Location · Sales Channel · Storage Conditions ·
+ *   Quantity · Expiration · Expiration Status · Stock Status
+ *
+ * DEFAULT FILTER:
+ * "Needs action" — expired, expiring within 14 days, sold out, or understocked.
+ * That is the morning list the coordinator asked for: what needs a decision today
+ * without reading every row.
+ *
+ * TEST CLOCK:
+ * Status is measured against APP_REFERENCE_DATE in lib/inventory.ts (near the
+ * earliest expiration in the dataset), not the real calendar, so shelf-life
+ * badges stay useful on this historical export.
+ *
+ * HOW TO MAINTAIN:
+ * - DEFAULT_PAGE_SIZE / PAGE_SIZE_OPTIONS control how many rows show per page.
+ * - The sync buttons are intentionally inert — search this file for "SWITCHED OFF".
  * ============================================================================
  */
 
@@ -36,21 +40,26 @@
 import { useEffect, useMemo, useState } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import {
-  classifyStatus,
+  APP_REFERENCE_DATE,
+  EXPIRING_SOON_DAYS,
+  classifyExpirationStatus,
+  classifyStockStatus,
   filterInventory,
+  type ActionFilter,
+  type ExpirationStatus,
   type InventoryAlert,
   type InventoryItem,
   type StockReport,
   type StockStatus,
 } from "@/lib/inventory";
 
-/** How many inventory rows show on one page when the page first opens. */
+/** How many batch rows show on one page when the page first opens. */
 const DEFAULT_PAGE_SIZE = 50;
 
 /** Choices offered in the "Show … rows" dropdown above the table. */
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 250, 500];
 
-/** The report can cover every product; this many rows are listed. */
+/** How many report rows to list under the curated report. */
 const REPORT_ROW_LIMIT = 100;
 
 type AlertCounts = {
@@ -69,10 +78,6 @@ const EMPTY_COUNTS: AlertCounts = {
   expired: 0,
 };
 
-/**
- * The report API sends back the report plus how many rows/alerts it had to leave
- * out, so the page can say "showing 100 of 4,325".
- */
 type ReportResponse = StockReport & {
   lineTotal?: number;
   alertTotal?: number;
@@ -86,13 +91,14 @@ function formatUnits(value: number): string {
 export default function Home() {
   /* ---------- Inventory display state ---------- */
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  /** How many CSV batch lines the unique product list was built from. */
   const [sourceRecordCount, setSourceRecordCount] = useState(0);
+  const [referenceDate, setReferenceDate] = useState(APP_REFERENCE_DATE);
   const [alerts, setAlerts] = useState<InventoryAlert[]>([]);
   const [alertTotal, setAlertTotal] = useState(0);
   const [alertCounts, setAlertCounts] = useState<AlertCounts>(EMPTY_COUNTS);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | StockStatus>("all");
+  /** Default morning view: only batches that need a decision today. */
+  const [actionFilter, setActionFilter] = useState<ActionFilter>("needs_action");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
@@ -103,12 +109,11 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ReportResponse | null>(null);
 
-  /* ---------- Initial load of current inventory ---------- */
   useEffect(() => {
     void refreshInventory();
   }, []);
 
-  /** Fetches the unique product list plus the alert badge counts from /api/inventory. */
+  /** Fetches the unique batch list plus alert badge counts from /api/inventory. */
   async function refreshInventory() {
     setLoadingInventory(true);
     setError(null);
@@ -118,6 +123,7 @@ export default function Home() {
       if (!res.ok) throw new Error(data?.error ?? "Failed to load inventory.");
       setInventory(data.items ?? []);
       setSourceRecordCount(data.sourceRecordCount ?? 0);
+      setReferenceDate(data.referenceDate ?? APP_REFERENCE_DATE);
       setAlerts(data.alerts ?? []);
       setAlertTotal(data.alertTotal ?? (data.alerts?.length ?? 0));
       setAlertCounts(data.alertCounts ?? EMPTY_COUNTS);
@@ -130,8 +136,7 @@ export default function Home() {
 
   /**
    * Asks the API to build a curated report from data/inventory/inventory.csv.
-   * The server reads the file itself, so the whole dataset never has to be
-   * uploaded back from the browser.
+   * The server reads the file itself so the browser never has to upload the dataset.
    */
   async function generateReport() {
     setReporting(true);
@@ -151,116 +156,26 @@ export default function Home() {
 
   /* ==========================================================================
    * SWITCHED OFF — DEPARTMENT DATA SYNC HANDLERS
-   * ==========================================================================
-   * The buttons in the "Department data sync" panel below are visible but do
-   * nothing on purpose. The code that made them work is kept here, commented
-   * out, so it can be switched back on later.
-   *
-   * TO SWITCH A BUTTON BACK ON:
-   *   1) Remove the /* and *\/ around the handler you need below.
-   *   2) Uncomment the matching onClick line on that button in the panel.
-   *   3) Uncomment the matching pieces of state (sales, incoming, loading flags).
-   *
-   * The APIs these handlers call (/api/sales, /api/incoming,
-   * /api/inventory/update) are all still live, so nothing else has to change.
-   *
-   * // ---- state used by the handlers ----
-   * // const [sales, setSales] = useState<SalesItem[] | null>(null);
-   * // const [incoming, setIncoming] = useState<IncomingItem[] | null>(null);
-   * // const [loadingSales, setLoadingSales] = useState(false);
-   * // const [loadingIncoming, setLoadingIncoming] = useState(false);
-   * // const [updating, setUpdating] = useState(false);
-   *
-   * // ---- "Load sales data" ----
-   * // async function loadSales() {
-   * //   setLoadingSales(true);
-   * //   setError(null);
-   * //   setMessage(null);
-   * //   try {
-   * //     const res = await fetch("/api/sales");
-   * //     const data = await res.json();
-   * //     if (!res.ok) throw new Error(data?.error ?? "Failed to load sales.");
-   * //     setSales(data.items ?? []);
-   * //     setMessage(`Loaded ${data.count ?? 0} sales row(s) from ${data.source}.`);
-   * //   } catch (err) {
-   * //     setError(err instanceof Error ? err.message : "Failed to load sales.");
-   * //   } finally {
-   * //     setLoadingSales(false);
-   * //   }
-   * // }
-   *
-   * // ---- "Load incoming supplies" ----
-   * // async function loadIncoming() {
-   * //   setLoadingIncoming(true);
-   * //   setError(null);
-   * //   setMessage(null);
-   * //   try {
-   * //     const res = await fetch("/api/incoming");
-   * //     const data = await res.json();
-   * //     if (!res.ok) throw new Error(data?.error ?? "Failed to load incoming supplies.");
-   * //     setIncoming(data.items ?? []);
-   * //     setMessage(`Loaded ${data.count ?? 0} incoming row(s) from ${data.source}.`);
-   * //   } catch (err) {
-   * //     setError(err instanceof Error ? err.message : "Failed to load incoming supplies.");
-   * //   } finally {
-   * //     setLoadingIncoming(false);
-   * //   }
-   * // }
-   *
-   * // ---- "Check sales data" / "Check incoming supplies" (open a review tab) ----
-   * // function checkSales() {
-   * //   window.open("/check/sales", "_blank", "noopener,noreferrer");
-   * // }
-   * // function checkIncoming() {
-   * //   window.open("/check/incoming", "_blank", "noopener,noreferrer");
-   * // }
-   *
-   * // ---- "Update current inventory" (writes data/inventory/inventory.csv) ----
-   * // async function updateInventory() {
-   * //   setUpdating(true);
-   * //   setError(null);
-   * //   setMessage(null);
-   * //   try {
-   * //     const res = await fetch("/api/inventory/update", {
-   * //       method: "POST",
-   * //       headers: { "Content-Type": "application/json" },
-   * //       body: JSON.stringify({
-   * //         sales: sales ?? undefined,
-   * //         incoming: incoming ?? undefined,
-   * //       }),
-   * //     });
-   * //     const data = await res.json();
-   * //     if (!res.ok) throw new Error(data?.error ?? "Failed to update inventory.");
-   * //     setInventory(data.items ?? []);
-   * //     setAlerts(data.alerts ?? []);
-   * //     setAlertTotal(data.alertTotal ?? 0);
-   * //     setAlertCounts(data.alertCounts ?? EMPTY_COUNTS);
-   * //     setPage(1);
-   * //     setMessage(
-   * //       `Inventory updated using ${data.applied?.incomingRows ?? 0} incoming and ${data.applied?.salesRows ?? 0} sales row(s).`
-   * //     );
-   * //   } catch (err) {
-   * //     setError(err instanceof Error ? err.message : "Failed to update inventory.");
-   * //   } finally {
-   * //     setUpdating(false);
-   * //   }
-   * // }
+   * The buttons stay visible but do nothing. Search this block to re-enable.
    * ========================================================================== */
 
-  /* ---------- Search / filter / pagination (list-only; toolbar stays put) ---------- */
+  /* ---------- Search / filter / pagination ---------- */
   const filtered = useMemo(
-    () => filterInventory(inventory, search, statusFilter),
-    [inventory, search, statusFilter]
+    () => filterInventory(inventory, search, actionFilter),
+    [inventory, search, actionFilter]
+  );
+
+  const needsActionCount = useMemo(
+    () => filterInventory(inventory, "", "needs_action").length,
+    [inventory]
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  // Clamp the page if filters shrink the result set (avoids an extra effect).
   const safePage = Math.min(page, totalPages);
   const pageRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-8 sm:py-12">
-      {/* ---- Brand / page intro (one composition, brand-forward) ---- */}
       <header className="anim-rise mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-medium uppercase tracking-[0.22em] text-[var(--accent)]">
@@ -270,8 +185,15 @@ export default function Home() {
             Stockflow
           </h1>
           <p className="mt-3 max-w-2xl text-[var(--muted)]">
-            Monitor live dairy stock product by product, spot expiry and restock risk early,
-            and generate an accurate restock report without retyping department data by hand.
+            See what needs attention today — low stock, upcoming expirations, and
+            reorder candidates — without reading every row of the dairy spreadsheet.
+          </p>
+          <p className="mt-2 text-xs text-[var(--muted)]">
+            Status clock: <span className="font-mono">{referenceDate}</span>
+            {" · "}
+            expiring window: {EXPIRING_SOON_DAYS} days
+            {" · "}
+            {needsActionCount.toLocaleString()} batches need action
           </p>
         </div>
         <div className="shrink-0 sm:pt-1">
@@ -301,16 +223,18 @@ export default function Home() {
         <AlertCard label="Expired" value={alertCounts.expired} tone="danger" />
       </section>
 
-      {/* Compact alert strip so coordinators see WHAT needs attention */}
       {alerts.length > 0 && (
         <div className="anim-rise anim-rise-delay-1 mb-6 flex flex-wrap gap-2">
           {alerts.slice(0, 8).map((alert, index) => (
             <span
-              key={`${alert.kind}-${alert.name}-${index}`}
+              key={`${alert.kind}-${alert.name}-${alert.location}-${index}`}
               className="rounded-md border border-[var(--panel-border)] bg-[var(--surface-soft)] px-2.5 py-1 text-xs text-[var(--muted)]"
-              title={`${alert.name}: ${alert.message}`}
+              title={alert.message}
             >
-              <strong className="text-[var(--foreground)]">{alert.name}</strong> ·{" "}
+              <strong className="text-[var(--foreground)]">{alert.name}</strong>
+              {" · "}
+              {alert.location}
+              {" · "}
               {alert.kind.replaceAll("_", " ")}
             </span>
           ))}
@@ -322,17 +246,17 @@ export default function Home() {
         </div>
       )}
 
-      {/* ---- Inventory list container (own scroll + pager; sticky search) ---- */}
+      {/* ---- Inventory batch list ---- */}
       <section aria-label="Current inventory" className="anim-rise anim-rise-delay-2 mb-8">
         <div className="mb-3 flex items-end justify-between gap-3">
           <div>
-            <h2 className="font-display text-xl font-semibold">Current inventory</h2>
+            <h2 className="font-display text-xl font-semibold">Inventory batches</h2>
             <p className="text-sm text-[var(--muted)]">
               {loadingInventory
                 ? "Loading stock…"
-                : `${filtered.length.toLocaleString()} of ${inventory.length.toLocaleString()} unique products shown` +
+                : `${filtered.length.toLocaleString()} of ${inventory.length.toLocaleString()} batches shown` +
                   (sourceRecordCount > 0
-                    ? ` · newest record of each, from ${sourceRecordCount.toLocaleString()} dataset rows`
+                    ? ` · grouped from ${sourceRecordCount.toLocaleString()} dataset rows`
                     : "")}
             </p>
           </div>
@@ -346,7 +270,6 @@ export default function Home() {
         </div>
 
         <div className="inventory-shell">
-          {/* Sticky toolbar — does NOT scroll away with the table body */}
           <div className="inventory-toolbar">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <label className="relative block min-w-0 flex-1" htmlFor="inventory-search">
@@ -361,34 +284,43 @@ export default function Home() {
                     setSearch(e.target.value);
                     setPage(1);
                   }}
-                  placeholder="Search brand, product name, or storage condition…"
+                  placeholder="Search name, location, channel, or storage…"
                   className="input-field w-full rounded-lg px-3 py-2.5 text-sm outline-none ring-[var(--accent)]/40 placeholder:text-[var(--muted)] focus:ring-2"
                 />
               </label>
-              <label className="flex items-center gap-2 text-sm text-[var(--muted)]" htmlFor="inventory-status-filter">
-                <span className="whitespace-nowrap">Filter</span>
+
+              {/* Action filter — default is the morning "needs a decision" list */}
+              <label
+                className="flex items-center gap-2 text-sm text-[var(--muted)]"
+                htmlFor="inventory-action-filter"
+              >
+                <span className="whitespace-nowrap">Show</span>
                 <select
-                  id="inventory-status-filter"
-                  name="inventory-status-filter"
-                  value={statusFilter}
+                  id="inventory-action-filter"
+                  name="inventory-action-filter"
+                  value={actionFilter}
                   onChange={(e) => {
-                    setStatusFilter(e.target.value as "all" | StockStatus);
+                    setActionFilter(e.target.value as ActionFilter);
                     setPage(1);
                   }}
                   className="input-field rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
                 >
-                  <option value="all">All statuses</option>
-                  <option value="healthy">Healthy</option>
+                  <option value="needs_action">Needs action</option>
+                  <option value="expired">Expired</option>
+                  <option value="expiring_soon">Expiring soon</option>
+                  <option value="out_of_stock">Sold out</option>
                   <option value="understocked">Understocked</option>
                   <option value="overstocked">Overstocked</option>
-                  <option value="expiring_soon">Expiring soon</option>
-                  <option value="expired">Expired</option>
-                  <option value="out_of_stock">Sold out</option>
+                  <option value="healthy">Healthy</option>
+                  <option value="all">All batches</option>
                 </select>
               </label>
-              {/* How many rows to display at a time — 50 by default, more on request */}
-              <label className="flex items-center gap-2 text-sm text-[var(--muted)]" htmlFor="inventory-page-size">
-                <span className="whitespace-nowrap">Show</span>
+
+              <label
+                className="flex items-center gap-2 text-sm text-[var(--muted)]"
+                htmlFor="inventory-page-size"
+              >
+                <span className="whitespace-nowrap">Rows</span>
                 <select
                   id="inventory-page-size"
                   name="inventory-page-size"
@@ -401,7 +333,7 @@ export default function Home() {
                 >
                   {PAGE_SIZE_OPTIONS.map((size) => (
                     <option key={size} value={size}>
-                      {size} rows
+                      {size}
                     </option>
                   ))}
                 </select>
@@ -409,60 +341,74 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Scrollable table body only */}
           <div className="inventory-scroll">
-            <table className="w-full min-w-[760px] border-collapse text-sm">
+            <table className="w-full min-w-[960px] border-collapse text-sm">
               <thead className="table-head sticky top-0 text-left text-[var(--muted)]">
                 <tr>
                   <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 text-right font-medium">Quantity (liters/kg)</th>
-                  <th className="px-4 py-3 text-right font-medium">Quantity Sold (liters/kg)</th>
+                  <th className="px-4 py-3 font-medium">Location</th>
+                  <th className="px-4 py-3 font-medium">Sales Channel</th>
                   <th className="px-4 py-3 font-medium">Storage Conditions</th>
-                  <th className="px-4 py-3 font-medium">Expiration Date</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 text-right font-medium">Quantity</th>
+                  <th className="px-4 py-3 font-medium">Expiration</th>
+                  <th className="px-4 py-3 font-medium">Expiration Status</th>
+                  <th className="px-4 py-3 font-medium">Stock Status</th>
                 </tr>
               </thead>
               <tbody>
                 {pageRows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-[var(--muted)]">
+                    <td colSpan={8} className="px-4 py-10 text-center text-[var(--muted)]">
                       {loadingInventory
                         ? "Loading…"
-                        : "No matching products. Clear the search/filter or add rows to data/inventory/inventory.csv."}
+                        : "No matching batches. Try “All batches” or clear the search."}
                     </td>
                   </tr>
                 ) : (
-                  pageRows.map((item) => (
-                    // Brand + product name identifies the product, so it is also
-                    // what React uses to tell the rows apart.
-                    <tr key={item.name} className="row-divider hover:bg-[var(--hover-fill)]">
-                      <td
-                        className="px-4 py-3 font-medium"
-                        // Hovering shows how much batch history the dataset holds
-                        // for this product and when its newest record was written.
-                        title={`Newest of ${item.batchCount.toLocaleString()} record(s) in the dataset, dated ${item.recordDate}`}
+                  pageRows.map((item) => {
+                    const expirationStatus = classifyExpirationStatus(item);
+                    const stockStatus = classifyStockStatus(item);
+                    return (
+                      <tr
+                        key={item.batchKey}
+                        className="row-divider hover:bg-[var(--hover-fill)]"
                       >
-                        {item.name}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {formatUnits(item.quantity)}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums">
-                        {formatUnits(item.quantitySold)}
-                      </td>
-                      <td className="px-4 py-3 text-[var(--muted)]">{item.storageCondition}</td>
-                      <td className="px-4 py-3">{item.expirationDate}</td>
-                      <td className="px-4 py-3">
-                        <StatusChip status={classifyStatus(item)} />
-                      </td>
-                    </tr>
-                  ))
+                        <td
+                          className="px-4 py-3 font-medium"
+                          title={`${item.sourceRowCount.toLocaleString()} dataset row(s) · reorder ${formatUnits(item.reorderQuantity)} · min ${formatUnits(item.minimumStockThreshold)}`}
+                        >
+                          {item.name}
+                        </td>
+                        <td
+                          className="px-4 py-3"
+                          title={
+                            item.customerLocations.length > 0
+                              ? `Customer locations: ${item.customerLocations.join(", ")}`
+                              : undefined
+                          }
+                        >
+                          {item.location}
+                        </td>
+                        <td className="px-4 py-3">{item.salesChannel}</td>
+                        <td className="px-4 py-3 text-[var(--muted)]">{item.storageCondition}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">
+                          {formatUnits(item.quantity)}
+                        </td>
+                        <td className="px-4 py-3">{item.expirationDate}</td>
+                        <td className="px-4 py-3">
+                          <ExpirationChip status={expirationStatus} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <StockChip status={stockStatus} />
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
 
-          {/* Page navigation stays pinned under the scroll area */}
           <div className="inventory-pager">
             <p className="text-xs text-[var(--muted)]">
               Page {safePage} of {totalPages.toLocaleString()} · {pageSize} rows per page
@@ -489,29 +435,25 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ---- Sales / supplies integration controls ----
-           SWITCHED OFF: every button in this panel keeps its place in the layout
-           but has its onClick commented out, so clicking does nothing. ---- */}
+      {/* ---- Department data sync (SWITCHED OFF) ---- */}
       <section
         aria-label="Sync sales and supplies"
         className="anim-rise anim-rise-delay-3 mb-8 rounded-[18px] border border-[var(--panel-border)] bg-[var(--panel)] p-5 backdrop-blur"
       >
         <h2 className="font-display text-xl font-semibold">Department data sync</h2>
         <p className="mt-1 max-w-3xl text-sm text-[var(--muted)]">
-          Sales and receiving figures now arrive inside the inventory spreadsheet itself,
-          so these sync controls are paused. The buttons stay here for a future live feed.
+          Sales and receiving sync is paused. Batches above already come from the
+          inventory spreadsheet. Buttons stay here for a future live feed.
         </p>
 
         <div className="mt-5 grid gap-4 lg:grid-cols-3">
-          {/* Sales column */}
           <div className="surface-card rounded-xl p-4">
             <h3 className="font-medium">Sales data</h3>
             <p className="mt-1 text-xs text-[var(--muted)]">
-              Source: <code className="font-mono">data/inventory/inventory.csv</code> ·
-              column <code className="font-mono">Quantity Sold (liters/kg)</code>
+              Source: <code className="font-mono">data/inventory/inventory.csv</code>
             </p>
             <p className="mt-2 text-sm text-[var(--muted)]">
-              Sync paused — sold quantities are already part of the inventory list above.
+              Sync paused — Quantity Sold is ignored for status calculations for now.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <button
@@ -531,15 +473,13 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Incoming column */}
           <div className="surface-card rounded-xl p-4">
             <h3 className="font-medium">Incoming supplies</h3>
             <p className="mt-1 text-xs text-[var(--muted)]">
-              Source: <code className="font-mono">data/inventory/inventory.csv</code> ·
-              batch quantity, expiration date and storage condition
+              Source: <code className="font-mono">data/inventory/inventory.csv</code>
             </p>
             <p className="mt-2 text-sm text-[var(--muted)]">
-              Sync paused — the newest received batch of each product is already listed above.
+              Sync paused — received batches are already part of the list above.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <button
@@ -559,14 +499,13 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Update column */}
           <div className="surface-card rounded-xl p-4">
             <h3 className="font-medium">Update inventory</h3>
             <p className="mt-1 text-xs text-[var(--muted)]">
               Would write to <code className="font-mono">data/inventory/inventory.csv</code>
             </p>
             <p className="mt-2 text-sm text-[var(--muted)]">
-              Paused as well, so the dataset above stays exactly as delivered.
+              Paused so the dataset above stays exactly as delivered.
             </p>
             <div className="mt-4">
               <button
@@ -598,7 +537,8 @@ export default function Home() {
           <div>
             <h2 className="font-display text-xl font-semibold">Curated inventory report</h2>
             <p className="text-sm text-[var(--muted)]">
-              Cross-checks minimum stock levels, shelf life, and how fast each product is selling.
+              Weekly-style status report: reorder candidates, shelf-life risk, and
+              overstock — ready for the operations manager.
             </p>
           </div>
           <button
@@ -612,9 +552,14 @@ export default function Home() {
         </div>
 
         {report && (
-          <div className="mt-5 rounded-[18px] border border-[var(--panel-border)] bg-[var(--panel)] p-5" data-testid="report">
+          <div
+            className="mt-5 rounded-[18px] border border-[var(--panel-border)] bg-[var(--panel)] p-5"
+            data-testid="report"
+          >
             <p className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
               Generated {new Date(report.generatedAt).toLocaleString()}
+              {" · "}
+              status clock {report.referenceDate}
             </p>
             <p className="mt-3 text-[var(--foreground)]">{report.summary}</p>
 
@@ -626,12 +571,9 @@ export default function Home() {
             </ul>
 
             <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <MiniStat label="Products" value={report.totals.itemCount} />
-              <MiniStat label="Units in stock" value={report.totals.totalUnits} />
-              <MiniStat
-                label="Need reorder"
-                value={report.totals.outOfStockCount + report.totals.understockedCount}
-              />
+              <MiniStat label="Batches" value={report.totals.itemCount} />
+              <MiniStat label="Units" value={report.totals.totalUnits} />
+              <MiniStat label="Need action" value={report.totals.needsActionCount} />
               <MiniStat
                 label="Shelf risk"
                 value={report.totals.expiringSoonCount + report.totals.expiredCount}
@@ -641,39 +583,37 @@ export default function Home() {
             <p className="mt-5 text-xs text-[var(--muted)]">
               Most urgent first — showing{" "}
               {Math.min(REPORT_ROW_LIMIT, report.lines.length).toLocaleString()} of{" "}
-              {(report.lineTotal ?? report.lines.length).toLocaleString()} products.
+              {(report.lineTotal ?? report.lines.length).toLocaleString()} batches.
             </p>
 
             <div className="mt-2 overflow-x-auto rounded-xl border border-[var(--panel-border)]">
-              <table className="w-full min-w-[680px] border-collapse text-sm">
+              <table className="w-full min-w-[820px] border-collapse text-sm">
                 <thead className="bg-[var(--surface-soft)] text-left text-[var(--muted)]">
                   <tr>
                     <th className="px-3 py-2 font-medium">Name</th>
-                    <th className="px-3 py-2 text-right font-medium">Quantity (liters/kg)</th>
-                    <th className="px-3 py-2 text-right font-medium">Quantity Sold (liters/kg)</th>
-                    <th className="px-3 py-2 text-right font-medium">In stock</th>
-                    <th className="px-3 py-2 font-medium">Status</th>
-                    <th className="px-3 py-2 text-right font-medium">Days to expiry</th>
+                    <th className="px-3 py-2 font-medium">Location</th>
+                    <th className="px-3 py-2 font-medium">Channel</th>
+                    <th className="px-3 py-2 text-right font-medium">Quantity</th>
+                    <th className="px-3 py-2 font-medium">Expiration</th>
+                    <th className="px-3 py-2 font-medium">Expiration Status</th>
+                    <th className="px-3 py-2 font-medium">Stock Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {report.lines.slice(0, REPORT_ROW_LIMIT).map((line) => (
-                    <tr key={line.name} className="row-divider">
+                    <tr key={line.batchKey} className="row-divider">
                       <td className="px-3 py-2">{line.name}</td>
+                      <td className="px-3 py-2">{line.location}</td>
+                      <td className="px-3 py-2">{line.salesChannel}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {formatUnits(line.quantity)}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {formatUnits(line.quantitySold)}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {formatUnits(line.quantityInStock)}
+                      <td className="px-3 py-2">{line.expirationDate}</td>
+                      <td className="px-3 py-2">
+                        <ExpirationChip status={line.expirationStatus} />
                       </td>
                       <td className="px-3 py-2">
-                        <StatusChip status={line.status} />
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {line.daysUntilExpiration}
+                        <StockChip status={line.stockStatus} />
                       </td>
                     </tr>
                   ))}
@@ -688,7 +628,7 @@ export default function Home() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Small presentational helpers (kept in this file for easy maintenance)      */
+/* Small presentational helpers                                               */
 /* -------------------------------------------------------------------------- */
 
 function AlertCard({
@@ -714,32 +654,48 @@ function AlertCard({
   return (
     <div
       className={`surface-card rounded-xl px-4 py-3 ${pulse ? "alert-pulse" : ""}`}
-      style={{ borderColor: value > 0 ? `color-mix(in srgb, ${color} 45%, transparent)` : undefined }}
+      style={{
+        borderColor: value > 0 ? `color-mix(in srgb, ${color} 45%, transparent)` : undefined,
+      }}
     >
       <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tabular-nums" style={{ color: value > 0 ? color : undefined }}>
+      <p
+        className="mt-1 text-2xl font-semibold tabular-nums"
+        style={{ color: value > 0 ? color : undefined }}
+      >
         {value.toLocaleString()}
       </p>
     </div>
   );
 }
 
-/** Colour-coded wording for the Status column. */
-function StatusChip({ status }: { status: StockStatus }) {
+/** Colour-coded wording for the Expiration Status column. */
+function ExpirationChip({ status }: { status: ExpirationStatus }) {
+  const styles: Record<ExpirationStatus, string> = {
+    ok: "text-[var(--accent)]",
+    expiring_soon: "text-[var(--warn)]",
+    expired: "text-[var(--danger)]",
+  };
+  const labels: Record<ExpirationStatus, string> = {
+    ok: "ok",
+    expiring_soon: "expiring soon",
+    expired: "expired",
+  };
+  return <span className={`text-xs ${styles[status]}`}>{labels[status]}</span>;
+}
+
+/** Colour-coded wording for the Stock Status column. */
+function StockChip({ status }: { status: StockStatus }) {
   const styles: Record<StockStatus, string> = {
     healthy: "text-[var(--accent)]",
     understocked: "text-[var(--warn)]",
     overstocked: "text-[var(--over)]",
-    expiring_soon: "text-[var(--warn)]",
-    expired: "text-[var(--danger)]",
     out_of_stock: "text-[var(--danger)]",
   };
   const labels: Record<StockStatus, string> = {
     healthy: "healthy",
     understocked: "understocked",
     overstocked: "overstocked",
-    expiring_soon: "expiring soon",
-    expired: "expired",
     out_of_stock: "sold out",
   };
   return <span className={`text-xs ${styles[status]}`}>{labels[status]}</span>;

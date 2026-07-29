@@ -1,17 +1,31 @@
 # Stockflow (inventory-report-generator)
 
-Inventory monitoring for coordinators: browse a real dairy inventory dataset batch by batch, see the stock status of every batch (sold out, understocked, overstocked, expiring soon, expired), and generate a curated restock report.
+Morning workbench for a dairy inventory coordinator: see which batches need action today (low stock, sold out, expired, or expiring within two weeks), place reorders, and generate a weekly-style status report — without reading every spreadsheet row.
 
-Data source: `data/inventory/inventory.csv` — the dairy dataset, one line per product batch, with brand, quantity, quantity sold, storage condition, expiration date, and restock thresholds.
+Data source: `data/inventory/inventory.csv` — real dairy export (~4,325 lines).
 
-**Unique products:** the spreadsheet stores history, so a product appears on hundreds of lines. A product is identified by its **name — brand plus product name** ("Amul Milk"), which is unique in this dataset; the file's `Product ID` column is not, because every brand of a product shares the same id. The app groups the lines by name into 40 unique products and shows each product's newest record, so every value on a row comes from one real CSV line. The `Product ID` column is not displayed; it is preserved when the file is saved.
+## How batches are built
+
+CSV lines that share **Location + Product Name + Brand + Storage Condition + Sales Channel** are rolled into one batch (~1,940 batches).
+
+| Field | Rule |
+| --- | --- |
+| Quantity, Minimum Stock Threshold, Reorder Quantity, Total Value, Approx. Total Revenue | Sum of the source lines |
+| Price per Unit | Quantity-weighted average |
+| Expiration | Earliest of each line's `min(Expiration Date, Production Date + Shelf Life days)` |
+| Customer locations | Running list of distinct `Customer Location` values |
+| Name | Brand + Product Name |
+
+**Ignored for status math (for now):** `Quantity Sold` and `Quantity in Stock`. Stock status uses summed **Quantity** vs summed **Minimum Stock Threshold** / **Reorder Quantity**.
+
+**Status clock:** shelf life is measured against `APP_REFERENCE_DATE` in `lib/inventory.ts` (default `2018-11-20`, near the earliest expiration in the file), not the real calendar, so this historical export still shows a useful mix of expired / expiring / ok. Switch `STATUS_CLOCK` to `"real_today"` for a live feed.
 
 ## Tech stack
 
 - Next.js 16 (App Router, Turbopack) + React 19
 - TypeScript
 - Tailwind CSS v4 + custom CSS in `app/globals.css`
-- CSV dataset under `data/inventory/` (real dairy inventory export)
+- CSV dataset under `data/inventory/`
 
 ## Prerequisites
 
@@ -41,8 +55,6 @@ Health check: **http://localhost:3000/api/health**
 
 ### Reset inventory baseline
 
-After Update demos change live stock:
-
 ```bash
 npm run restore:inventory
 ```
@@ -57,32 +69,25 @@ npm run build
 npm start
 ```
 
-`npm start` boots the standalone Node server (see `scripts/start-production.cjs`). Serve behind a reverse proxy (nginx/Caddy) with HTTPS. Keep the `data/` directory on persistent disk so inventory writes survive restarts.
+Keep `data/` on persistent disk so inventory writes survive restarts.
 
-### Option B — Docker (recommended for VMs)
+### Option B — Docker
 
 ```bash
 npm run docker:build
 npm run docker:run
 ```
 
-Or:
-
-```bash
-docker build -t stockflow .
-docker run --rm -p 3000:3000 -v stockflow-data:/app/data stockflow
-```
-
 - App: http://localhost:3000
 - Health: http://localhost:3000/api/health
-- Persist `/app/data` with a volume — inventory updates write to `inventory.csv`
+- Persist `/app/data` with a volume
 
 ### Important deployment notes
 
-1. **Persistence:** `POST /api/inventory/update` writes `data/inventory/inventory.csv`. Use a durable volume (Docker/VM). Pure ephemeral serverless filesystems will lose writes.
-2. **Auth:** Routes are currently open. Put the service on a private network or add authentication before exposing to the public internet.
-3. **Seed vs live data:** `inventory.seed.csv` is the untouched original dataset; `inventory.csv` is the live working copy.
-4. **Config:** Copy `.env.example` → `.env.local` for local overrides (do not commit secrets).
+1. **Persistence:** `POST /api/inventory/update` writes `data/inventory/inventory.csv`. Use a durable volume.
+2. **Auth:** Routes are currently open — put the service on a private network or add auth before public exposure.
+3. **Seed vs live data:** `inventory.seed.csv` is the untouched original; `inventory.csv` is the live copy.
+4. **Config:** Copy `.env.example` → `.env.local` for local overrides.
 
 ## Scripts
 
@@ -99,27 +104,27 @@ docker run --rm -p 3000:3000 -v stockflow-data:/app/data stockflow
 
 ## How to use the page
 
-1. **Alert cards** summarize out-of-stock, understocked, overstocked, expiring, and expired items.
-2. **Current inventory** lists one row per unique product: Name (Brand + Product Name), Quantity (liters/kg), Quantity Sold (liters/kg), Storage Conditions, Expiration Date, and Status. Hover a product name to see how many dataset records it has and when its newest one was written. 50 rows show per page by default; the **Show** dropdown goes up to 500. Search/filter stay fixed; the table scrolls; pagination sits below.
-3. **Department data sync** — currently paused: the Load / Check / Update buttons are visible but their click handlers are commented out (see `app/page.tsx`).
-4. **Theme toggle** — Defaults to light mode; switch to dark anytime (saved in the browser).
-5. **Generate report** — Curated status report with recommendations.
+1. **Alert cards** summarize sold out, understocked, overstocked, expiring soon, and expired batches.
+2. **Inventory batches** (default filter **Needs action**) lists batches that are expired, expiring within 14 days, sold out, or understocked. Columns: Name, Location, Sales Channel, Storage Conditions, Quantity, Expiration, Expiration Status, Stock Status. Switch the filter to Overstocked / Healthy / All batches as needed. 50 rows per page by default (Rows dropdown goes to 500).
+3. **Department data sync** — paused: Load / Check / Update buttons are visible but their click handlers are commented out (see `app/page.tsx`).
+4. **Theme toggle** — defaults to light mode.
+5. **Generate report** — curated status report with reorder and shelf-life recommendations.
 
 ## Data layout
 
 | Path | Role |
 | --- | --- |
-| `data/inventory/inventory.csv` | Live stock — one line per dairy product batch; grouped into unique products for display (writable) |
-| `data/inventory/inventory.seed.csv` | Untouched original dataset, used by `npm run restore:inventory` |
+| `data/inventory/inventory.csv` | Live dairy export; grouped into batches for display (writable) |
+| `data/inventory/inventory.seed.csv` | Untouched original; `npm run restore:inventory` |
 
 ## Project layout
 
-- `app/page.tsx` — main monitoring UI
+- `app/page.tsx` — main coordinator UI
 - `app/check/*` — sales / incoming check tabs
 - `app/api/*` — inventory, sales, incoming, update, report, health
-- `lib/inventory.ts` — alerts, updates, report logic
+- `lib/inventory.ts` — status rules, filters, alerts, report
 - `lib/csv.ts` — CSV reader / writer
-- `lib/data-store.ts` — CSV file I/O and the CSV-column → app-field map
+- `lib/data-store.ts` — CSV I/O and batch aggregation
 - `lib/validate.ts` — API body validation
 - `components/*` — theme provider / toggle
 - `Dockerfile` — production container
