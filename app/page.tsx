@@ -195,8 +195,8 @@ export default function Home() {
 
   /**
    * Applies the inventory list filter that matches a clicked alert badge.
-   * Also jumps back to page 1 and scrolls the batch list into view so the
-   * coordinator sees the filtered rows right away.
+   * Also jumps back to page 1 of the list. Does NOT scroll the page — the
+   * coordinator stays on the badge strip and can glance down when ready.
    *
    * Badge → filter mapping (must stay in sync with the <select> options below):
    *   Need action   → needs_action
@@ -209,12 +209,6 @@ export default function Home() {
   function applyBadgeFilter(filter: ActionFilter) {
     setActionFilter(filter);
     setPage(1);
-    if (typeof document !== "undefined") {
-      document.getElementById("inventory-batches")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }
   }
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -280,8 +274,9 @@ export default function Home() {
 
         CLICK BEHAVIOUR:
           Each badge is a button. Clicking it selects the matching option in the
-          inventory list filter dropdown (Needs action / Sold out / …) and scrolls
-          down to the list. The active badge is highlighted to match the dropdown.
+          inventory list filter dropdown (Needs action / Sold out / …) and resets
+          the list to page 1. The page does not scroll — the active badge is
+          highlighted to match the dropdown.
 
         HOW TO MAINTAIN:
           - Rename labels in the AlertCard calls below.
@@ -436,7 +431,13 @@ export default function Home() {
                 />
               </label>
 
-              {/* Action filter — default is the morning "needs a decision" list */}
+              {/*
+                Action filter dropdown ("Show …").
+                "All batches" is listed first so it is easy to find; the page still
+                opens on "Needs action" (see actionFilter useState above) for the
+                morning work queue. Reorder the <option>s carefully — badge clicks
+                use the same value strings.
+              */}
               <label
                 className="flex items-center gap-2 text-sm text-[var(--muted)]"
                 htmlFor="inventory-action-filter"
@@ -452,6 +453,7 @@ export default function Home() {
                   }}
                   className="input-field rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
                 >
+                  <option value="all">All batches</option>
                   <option value="needs_action">Needs action</option>
                   <option value="expired">Expired</option>
                   <option value="expiring_soon">Expiring soon</option>
@@ -459,7 +461,6 @@ export default function Home() {
                   <option value="understocked">Understocked</option>
                   <option value="overstocked">Overstocked</option>
                   <option value="healthy">Healthy</option>
-                  <option value="all">All batches</option>
                 </select>
               </label>
 
