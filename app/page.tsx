@@ -188,12 +188,14 @@ export default function Home() {
             See what needs attention today — low stock, upcoming expirations, and
             reorder candidates — without reading every row of the dairy spreadsheet.
           </p>
-          <p className="mt-2 text-xs text-[var(--muted)]">
-            Status clock: <span className="font-mono">{referenceDate}</span>
+          <p className="mt-2 text-[var(--muted)]">
+            <span className="font-bold">Today&apos;s Date</span>:{" "}
+            <span className="font-mono">{referenceDate}</span>
             {" · "}
             expiring window: {EXPIRING_SOON_DAYS} days
             {" · "}
-            {needsActionCount.toLocaleString()} batches need action
+            <span className="font-bold">{needsActionCount.toLocaleString()}</span>{" "}
+            batches need action
           </p>
         </div>
         <div className="shrink-0 sm:pt-1">
