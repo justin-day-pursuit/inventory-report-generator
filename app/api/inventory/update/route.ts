@@ -24,7 +24,7 @@ import { INVENTORY_SOURCE, readInventory, writeInventory } from "@/lib/data-stor
 import {
   applyInventoryUpdates,
   buildAlerts,
-  summarizeAlertCounts,
+  summarizeBatchStatusCounts,
 } from "@/lib/inventory";
 import { parseIncomingItems, parseSalesItems } from "@/lib/validate";
 
@@ -51,7 +51,8 @@ export async function POST(request: Request) {
       count: updated.length,
       alerts: alerts.slice(0, ALERT_PREVIEW_LIMIT),
       alertTotal: alerts.length,
-      alertCounts: summarizeAlertCounts(alerts),
+      // Batch counts for the summary badges (includes morning "Need action").
+      alertCounts: summarizeBatchStatusCounts(updated),
       applied: {
         salesRows: sales.length,
         incomingRows: incoming.length,
