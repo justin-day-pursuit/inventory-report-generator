@@ -7,8 +7,9 @@
  *   1) Alert summary cards (Need action overview, then sold out / understocked /
  *      overstocked / expiring / expired — each number is a BATCH count)
  *   2) Batch list focused on what needs action today
- *   3) Department data sync panel (currently switched off)
- *   4) Curated stock report for the operations manager
+ *   3) Curated stock report for the operations manager
+ *      (success/error notifications for the report live in this section)
+ *   4) Department data sync panel — commented out; search "DEPARTMENT DATA SYNC"
  *
  * WHERE THE ROWS COME FROM:
  * data/inventory/inventory.csv, served by /api/inventory. Lines that share the same
@@ -43,7 +44,10 @@
  *   option (same values as the "Show" filter). Search this file for applyBadgeFilter.
  * - The small name/location/status chips under the badges are switched off —
  *   search "ITEM STATUS CHIPS (SWITCHED OFF)" to restore them.
- * - The sync buttons are intentionally inert — search this file for "SWITCHED OFF".
+ * - The whole Department data sync section is commented out — search
+ *   "DEPARTMENT DATA SYNC (SWITCHED OFF)" to restore the panel.
+ * - Report success/error banners live in the Curated inventory report section
+ *   (message / error state), not in the sync panel.
  * - When you change visible text or layout, leave a short plain-English comment
  *   so a non-technical editor can find and update it later.
  * ============================================================================
@@ -169,7 +173,7 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Failed to generate report.");
       setReport(data as ReportResponse);
-      setMessage("Curated inventory report ready — scroll down to review.");
+      setMessage("Curated inventory report ready.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate report.");
     } finally {
@@ -583,7 +587,22 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ---- Department data sync (SWITCHED OFF) ---- */}
+      {/*
+        DEPARTMENT DATA SYNC (SWITCHED OFF)
+        ---------------------------------------------------------
+        This whole panel (Sales / Incoming / Update inventory buttons) is hidden
+        for now. The curated report success/error banners used to sit at the
+        bottom of this panel; they now live in the Curated inventory report
+        section below so report feedback stays next to Generate report.
+
+        HOW TO TURN THE PANEL BACK ON:
+          1) Uncomment the <section>…</section> block below.
+          2) Optionally re-enable the button onClick handlers inside it
+             (search "SWITCHED OFF — onClick").
+          3) Keep the report message/error banners in the report section —
+             do not move them back here unless you have a reason to.
+      */}
+      {/*
       <section
         aria-label="Sync sales and supplies"
         className="anim-rise anim-rise-delay-3 mb-8 rounded-[18px] border border-[var(--panel-border)] bg-[var(--panel)] p-5 backdrop-blur"
@@ -666,20 +685,16 @@ export default function Home() {
             </div>
           </div>
         </div>
-
-        {message && (
-          <p className="mt-4 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-2 text-sm">
-            {message}
-          </p>
-        )}
-        {error && (
-          <p className="mt-4 rounded-lg border border-[var(--danger)]/40 bg-[var(--danger)]/10 px-4 py-2 text-sm">
-            {error}
-          </p>
-        )}
       </section>
+      */}
 
-      {/* ---- Report generation ---- */}
+      {/*
+        CURATED INVENTORY REPORT
+        Success and error banners for Generate report (and any future report
+        actions) show here — they used to live under Department data sync.
+        HOW TO MAINTAIN: edit the message/error <p> tags below; generateReport()
+        sets those strings.
+      */}
       <section aria-label="Generate inventory report" className="mb-10">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -698,6 +713,17 @@ export default function Home() {
             {reporting ? "Generating…" : "Generate report"}
           </button>
         </div>
+
+        {message && (
+          <p className="mt-4 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-2 text-sm">
+            {message}
+          </p>
+        )}
+        {error && (
+          <p className="mt-4 rounded-lg border border-[var(--danger)]/40 bg-[var(--danger)]/10 px-4 py-2 text-sm">
+            {error}
+          </p>
+        )}
 
         {report && (
           <div
