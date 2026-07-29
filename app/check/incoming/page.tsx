@@ -2,15 +2,9 @@
  * ============================================================================
  * CHECK INCOMING SUPPLIES PAGE (app/check/incoming/page.tsx)
  * ============================================================================
- * WHAT THIS PAGE IS FOR:
- * Opens in a NEW browser tab when you click "Check incoming supplies".
- * Loads data/incoming/incoming.json via /api/incoming so receiving totals can be
- * verified before they are added into inventory.
- *
- * HOW TO MAINTAIN:
- * - Keep columns in sync with fields used in data/incoming/incoming.json:
- *   sku, name, quantity, expiration, storageRequirements.
- * - New SKUs in this feed become new inventory rows when you run Update.
+ * Read-only list of inventory batches from /api/incoming — quantity, expiration,
+ * storage, location and sales channel. The main-page button that opens this tab
+ * is currently switched off.
  * ============================================================================
  */
 
@@ -22,6 +16,7 @@ import type { IncomingItem } from "@/lib/inventory";
 
 export default function CheckIncomingPage() {
   const [items, setItems] = useState<IncomingItem[]>([]);
+  const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loadedAt, setLoadedAt] = useState<string | null>(null);
 
@@ -34,6 +29,7 @@ export default function CheckIncomingPage() {
         if (!res.ok) throw new Error(data?.error ?? "Could not load incoming supplies.");
         if (!cancelled) {
           setItems(data.items ?? []);
+          setTotal(data.total ?? data.items?.length ?? 0);
           setLoadedAt(data.loadedAt ?? new Date().toISOString());
         }
       } catch (err) {
@@ -56,7 +52,7 @@ export default function CheckIncomingPage() {
             Incoming supplies
           </h1>
           <p className="mt-2 text-[var(--muted)]">
-            Read-only view of <code className="font-mono text-sm">data/incoming/incoming.json</code>
+            Read-only view of <code className="font-mono text-sm">data/inventory/inventory.csv</code>
             {loadedAt ? ` · loaded ${new Date(loadedAt).toLocaleString()}` : ""}
           </p>
         </div>
@@ -71,34 +67,43 @@ export default function CheckIncomingPage() {
 
       <div className="inventory-shell" style={{ maxHeight: "75vh" }}>
         <div className="inventory-toolbar">
-          <p className="text-sm text-[var(--muted)]">{items.length} supply row(s)</p>
+          <p className="text-sm text-[var(--muted)]">
+            {items.length.toLocaleString()} of {total.toLocaleString()} batch(es)
+          </p>
         </div>
         <div className="inventory-scroll">
           <table className="w-full border-collapse text-sm">
             <thead className="table-head sticky top-0 text-left text-[var(--muted)]">
               <tr>
-                <th className="px-4 py-3 font-medium">SKU</th>
                 <th className="px-4 py-3 font-medium">Name</th>
+                <th className="px-4 py-3 font-medium">Location</th>
+                <th className="px-4 py-3 font-medium">Sales Channel</th>
                 <th className="px-4 py-3 text-right font-medium">Quantity</th>
-                <th className="px-4 py-3 font-medium">Expiration</th>
-                <th className="px-4 py-3 font-medium">Storage requirements</th>
+                <th className="px-4 py-3 font-medium">Storage Conditions</th>
+                <th className="px-4 py-3 font-medium">Expiration Date</th>
               </tr>
             </thead>
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-[var(--muted)]">
-                    No incoming rows found. Add data to data/incoming/incoming.json.
+                  <td colSpan={6} className="px-4 py-8 text-center text-[var(--muted)]">
+                    No batches found in data/inventory/inventory.csv.
                   </td>
                 </tr>
               ) : (
                 items.map((row, idx) => (
-                  <tr key={`${row.sku}-${idx}`} className="row-divider">
-                    <td className="font-mono px-4 py-3 text-[var(--muted)]">{row.sku}</td>
+                  <tr
+                    key={`${row.name}-${row.location ?? ""}-${row.salesChannel ?? ""}-${idx}`}
+                    className="row-divider"
+                  >
                     <td className="px-4 py-3">{row.name}</td>
-                    <td className="px-4 py-3 text-right">{row.quantity}</td>
-                    <td className="px-4 py-3">{row.expiration}</td>
-                    <td className="px-4 py-3 text-[var(--muted)]">{row.storageRequirements}</td>
+                    <td className="px-4 py-3">{row.location ?? "—"}</td>
+                    <td className="px-4 py-3">{row.salesChannel ?? "—"}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {row.quantity.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-4 py-3 text-[var(--muted)]">{row.storageCondition}</td>
+                    <td className="px-4 py-3">{row.expirationDate}</td>
                   </tr>
                 ))
               )}

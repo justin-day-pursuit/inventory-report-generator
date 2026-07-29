@@ -2,19 +2,34 @@
  * ============================================================================
  * API: POST /api/inventory/update
  * ============================================================================
- * Applies sales (−) and incoming supplies (+) to inventory, then saves
- * data/inventory/inventory.json. Request bodies are validated before use.
+ * Applies a sales feed (−) and a receiving feed (+) to the stock levels in
+ * data/inventory/inventory.csv and saves the file.
+ *
+ * IMPORTANT — this endpoint expects the feeds in the request body:
+ *   { "sales": [{ name, quantitySold }],
+ *     "incoming": [{ name, quantity, expirationDate, storageCondition }] }
+ * `name` is Brand + Product Name (for example "Amul Milk"). Matching is by name;
+ * location / channel on incoming rows are used only when creating a brand-new batch.
+ * Both keys are optional; a missing key simply means "nothing to apply".
+ * The feeds are NOT read from the CSV automatically.
+ *
+ * NOTE: The "Update current inventory" button on the main page is currently
+ * switched off (its onClick is commented out in app/page.tsx), so nothing in the
+ * web UI calls this endpoint today. It stays available for other systems.
  * ============================================================================
  */
 
 import { NextResponse } from "next/server";
-import { readIncoming, readInventory, readSales, writeInventory } from "@/lib/data-store";
+import { INVENTORY_SOURCE, readInventory, writeInventory } from "@/lib/data-store";
 import {
   applyInventoryUpdates,
   buildAlerts,
   summarizeAlertCounts,
 } from "@/lib/inventory";
 import { parseIncomingItems, parseSalesItems } from "@/lib/validate";
+
+/** How many individual alerts are sent back with the response. */
+const ALERT_PREVIEW_LIMIT = 100;
 
 export const dynamic = "force-dynamic";
 
@@ -23,12 +38,9 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
 
     const inventory = await readInventory();
-    const sales =
-      body?.sales !== undefined ? parseSalesItems(body.sales) : await readSales();
+    const sales = body?.sales !== undefined ? parseSalesItems(body.sales) : [];
     const incoming =
-      body?.incoming !== undefined
-        ? parseIncomingItems(body.incoming)
-        : await readIncoming();
+      body?.incoming !== undefined ? parseIncomingItems(body.incoming) : [];
 
     const updated = applyInventoryUpdates(inventory, sales, incoming);
     await writeInventory(updated);
@@ -36,13 +48,15 @@ export async function POST(request: Request) {
     const alerts = buildAlerts(updated);
     return NextResponse.json({
       items: updated,
-      alerts,
+      count: updated.length,
+      alerts: alerts.slice(0, ALERT_PREVIEW_LIMIT),
+      alertTotal: alerts.length,
       alertCounts: summarizeAlertCounts(alerts),
       applied: {
         salesRows: sales.length,
         incomingRows: incoming.length,
       },
-      source: "data/inventory/inventory.json",
+      source: INVENTORY_SOURCE,
       updatedAt: new Date().toISOString(),
     });
   } catch (error) {

@@ -1,9 +1,13 @@
 /**
  * ============================================================================
- * API: POST /api/report  (also accepts GET)
+ * API: GET /api/report  (also accepts POST)
  * ============================================================================
- * Builds a curated inventory status report from disk inventory, or from a
+ * Builds the curated stock report from data/inventory/inventory.csv, or from a
  * validated `items` array in the POST body.
+ *
+ * Totals and recommendations always cover every batch; only the most urgent lines
+ * and a short alert preview are sent to the browser. `lineTotal` / `alertTotal`
+ * report the real numbers.
  * ============================================================================
  */
 
@@ -12,17 +16,26 @@ import { readInventory } from "@/lib/data-store";
 import { generateStockReport, type InventoryItem } from "@/lib/inventory";
 import { parseInventoryItems } from "@/lib/validate";
 
+const LINE_LIMIT = 200;
+const ALERT_PREVIEW_LIMIT = 100;
+
 export const dynamic = "force-dynamic";
 
 async function buildReport(itemsOverride?: InventoryItem[]) {
   const items = itemsOverride ?? (await readInventory());
-  return generateStockReport(items);
+  const report = generateStockReport(items);
+  return {
+    ...report,
+    lines: report.lines.slice(0, LINE_LIMIT),
+    lineTotal: report.lines.length,
+    alerts: report.alerts.slice(0, ALERT_PREVIEW_LIMIT),
+    alertTotal: report.alerts.length,
+  };
 }
 
 export async function GET() {
   try {
-    const report = await buildReport();
-    return NextResponse.json(report);
+    return NextResponse.json(await buildReport());
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to generate report.";
@@ -33,14 +46,8 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
-    let items: InventoryItem[] | undefined;
-
-    if (body?.items !== undefined) {
-      items = parseInventoryItems(body.items);
-    }
-
-    const report = await buildReport(items);
-    return NextResponse.json(report);
+    const items = body?.items !== undefined ? parseInventoryItems(body.items) : undefined;
+    return NextResponse.json(await buildReport(items));
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to generate report.";

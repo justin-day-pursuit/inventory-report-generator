@@ -2,31 +2,43 @@
  * ============================================================================
  * API: GET /api/inventory
  * ============================================================================
- * WHAT THIS ENDPOINT IS FOR:
- * Returns the current inventory list from data/inventory/inventory.json.
- * The main page calls this when it first loads (and whenever you refresh stock).
+ * Returns the unique inventory BATCHES from data/inventory/inventory.csv together
+ * with alert badge counts. The main page calls this on load and on Refresh.
  *
- * HOW TO MAINTAIN:
- * - Do not hard-code products here. Edit data/inventory/inventory.json instead.
- * - Later, replace readInventory() with a live warehouse-database call if needed.
+ * A batch is Location + Product Name + Brand + Storage Condition + Sales Channel.
+ * `sourceRecordCount` is how many CSV lines those batches were built from.
+ * `referenceDate` is the fake "today" used for shelf-life status (see APP_REFERENCE_DATE).
  * ============================================================================
  */
 
 import { NextResponse } from "next/server";
-import { readInventory } from "@/lib/data-store";
-import { buildAlerts, summarizeAlertCounts } from "@/lib/inventory";
+import { INVENTORY_SOURCE, readInventory } from "@/lib/data-store";
+import {
+  APP_REFERENCE_DATE,
+  appToday,
+  buildAlerts,
+  summarizeAlertCounts,
+} from "@/lib/inventory";
 
+/** How many individual alerts are sent to the browser for the alert chip strip. */
+const ALERT_PREVIEW_LIMIT = 100;
 
 export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const items = await readInventory();
     const alerts = buildAlerts(items);
     return NextResponse.json({
       items,
-      alerts,
+      count: items.length,
+      sourceRecordCount: items.reduce((sum, item) => sum + item.sourceRowCount, 0),
+      referenceDate: appToday().toISOString().slice(0, 10) || APP_REFERENCE_DATE,
+      alerts: alerts.slice(0, ALERT_PREVIEW_LIMIT),
+      alertTotal: alerts.length,
       alertCounts: summarizeAlertCounts(alerts),
-      source: "data/inventory/inventory.json",
+      source: INVENTORY_SOURCE,
+      loadedAt: new Date().toISOString(),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load inventory.";

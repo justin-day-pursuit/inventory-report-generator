@@ -2,15 +2,9 @@
  * ============================================================================
  * CHECK SALES DATA PAGE (app/check/sales/page.tsx)
  * ============================================================================
- * WHAT THIS PAGE IS FOR:
- * Opens in a NEW browser tab when you click "Check sales data" on the main tool.
- * It loads data/sales/sales.json through the /api/sales API and shows every row
- * in a simple list — so coordinators can verify the feed before updating stock.
- *
- * HOW TO MAINTAIN:
- * - Column labels must stay aligned with sales.json fields:
- *   sku, name, quantity, rateOfSale.
- * - Do not delete the fetch to /api/sales — that is the live link to the mock file.
+ * Read-only list of inventory batches from /api/sales.
+ * Quantity Sold is currently ignored for calculations, so sold amounts show as 0.
+ * The "Check sales data" button on the main page is switched off.
  * ============================================================================
  */
 
@@ -22,6 +16,7 @@ import type { SalesItem } from "@/lib/inventory";
 
 export default function CheckSalesPage() {
   const [items, setItems] = useState<SalesItem[]>([]);
+  const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loadedAt, setLoadedAt] = useState<string | null>(null);
 
@@ -34,6 +29,7 @@ export default function CheckSalesPage() {
         if (!res.ok) throw new Error(data?.error ?? "Could not load sales.");
         if (!cancelled) {
           setItems(data.items ?? []);
+          setTotal(data.total ?? data.items?.length ?? 0);
           setLoadedAt(data.loadedAt ?? new Date().toISOString());
         }
       } catch (err) {
@@ -54,8 +50,11 @@ export default function CheckSalesPage() {
           <p className="text-sm uppercase tracking-[0.18em] text-[var(--muted)]">Stockflow check</p>
           <h1 className="font-display mt-1 text-3xl font-semibold tracking-tight">Sales data</h1>
           <p className="mt-2 text-[var(--muted)]">
-            Read-only view of <code className="font-mono text-sm">data/sales/sales.json</code>
+            Read-only view of <code className="font-mono text-sm">data/inventory/inventory.csv</code>
             {loadedAt ? ` · loaded ${new Date(loadedAt).toLocaleString()}` : ""}
+          </p>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            Quantity Sold is ignored for status calculations right now, so sold amounts show as 0.
           </p>
         </div>
         <ThemeToggle />
@@ -69,34 +68,31 @@ export default function CheckSalesPage() {
 
       <div className="inventory-shell" style={{ maxHeight: "75vh" }}>
         <div className="inventory-toolbar">
-          <p className="text-sm text-[var(--muted)]">{items.length} sale row(s)</p>
+          <p className="text-sm text-[var(--muted)]">
+            {items.length.toLocaleString()} of {total.toLocaleString()} batch(es)
+          </p>
         </div>
         <div className="inventory-scroll">
           <table className="w-full border-collapse text-sm">
             <thead className="table-head sticky top-0 text-left text-[var(--muted)]">
               <tr>
-                <th className="px-4 py-3 font-medium">SKU</th>
                 <th className="px-4 py-3 font-medium">Name</th>
-                <th className="px-4 py-3 text-right font-medium">Quantity</th>
-                <th className="px-4 py-3 text-right font-medium">Rate of sale</th>
+                <th className="px-4 py-3 text-right font-medium">Quantity Sold (liters/kg)</th>
               </tr>
             </thead>
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-[var(--muted)]">
-                    No sales rows found. Add data to data/sales/sales.json.
+                  <td colSpan={2} className="px-4 py-8 text-center text-[var(--muted)]">
+                    No batches found in data/inventory/inventory.csv.
                   </td>
                 </tr>
               ) : (
-                items.map((row, idx) => (
-                  <tr key={`${row.sku}-${idx}`} className="row-divider">
-                    <td className="font-mono px-4 py-3 text-[var(--muted)]">{row.sku}</td>
+                items.map((row) => (
+                  <tr key={row.name} className="row-divider">
                     <td className="px-4 py-3">{row.name}</td>
-                    <td className="px-4 py-3 text-right">{row.quantity}</td>
-                    <td className="px-4 py-3 text-right">
-                      {row.rateOfSale}
-                      <span className="text-[var(--muted)]"> /day</span>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {row.quantitySold.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     </td>
                   </tr>
                 ))
