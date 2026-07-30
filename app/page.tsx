@@ -5,7 +5,7 @@
  * WHAT THIS PAGE IS FOR:
  * Morning workbench for the inventory coordinator. Top-to-bottom:
  *   1) Alert summary cards (Need action overview, then sold out / understocked /
- *      overstocked / expiring / expired — each number is a BATCH count)
+ *      expiring / expired — each number is a BATCH count; Overstocked badge is off)
  *   2) Batch list focused on what needs action today
  *   3) Curated stock report for the operations manager
  *      (success/error notifications for the report live in this section)
@@ -206,9 +206,9 @@ export default function Home() {
    *   Need action   → needs_action
    *   Sold out      → out_of_stock
    *   Understocked  → understocked
-   *   Overstocked   → overstocked
    *   Expiring soon → expiring_soon
    *   Expired       → expired
+   * Overstocked has no badge (filter + stock status still exist — see Show dropdown).
    */
   function applyBadgeFilter(filter: ActionFilter) {
     setActionFilter(filter);
@@ -274,7 +274,14 @@ export default function Home() {
         Order matters:
           1) Need action  — aggregate of sold out + understocked + expiring soon + expired
                             (a batch counted once even if it has more than one problem)
-          2–6) Detail badges for each status, including Overstocked (not in Need action)
+          2–5) Detail badges: Sold out, Understocked, Expiring soon, Expired
+
+        OVERSTOCKED BADGE (SWITCHED OFF):
+          There is no Overstocked summary badge on purpose. Overstocked batches
+          still get an "overstocked" Stock Status in the table, and the Show
+          filter still has an "Overstocked" option. The badge JSX is commented
+          out below — uncomment it and set the grid back to lg:grid-cols-6 to
+          restore the badge.
 
         CLICK BEHAVIOUR:
           Each badge is a button. Clicking it selects the matching option in the
@@ -287,12 +294,11 @@ export default function Home() {
           - To change which filter a badge applies, edit the `filter` prop
             (must be a value from the ActionFilter type / <select> options).
           - Status rules live in lib/inventory.ts — not here.
-          - Grid is 6 columns on large screens so all badges stay on one row;
-            cards use compact padding so the row still fits.
+          - Grid is 5 columns on large screens (Need action + 4 detail badges).
       */}
       <section
         aria-label="Inventory alerts"
-        className="anim-rise anim-rise-delay-1 mb-6 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6"
+        className="anim-rise anim-rise-delay-1 mb-6 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5"
       >
         <AlertCard
           label="Need action"
@@ -320,6 +326,8 @@ export default function Home() {
           active={actionFilter === "understocked"}
           onSelect={applyBadgeFilter}
         />
+        {/*
+          OVERSTOCKED BADGE (SWITCHED OFF) — keep status + Show filter; no badge.
         <AlertCard
           label="Overstocked"
           value={alertCounts.overstocked}
@@ -328,6 +336,7 @@ export default function Home() {
           active={actionFilter === "overstocked"}
           onSelect={applyBadgeFilter}
         />
+        */}
         <AlertCard
           label="Expiring soon"
           value={alertCounts.expiringSoon}
