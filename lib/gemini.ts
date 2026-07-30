@@ -30,8 +30,13 @@ import "server-only";
 
 import { GoogleGenAI } from "@google/genai";
 
-/** Free-tier friendly default; override with GEMINI_MODEL in `.env.local`. */
-export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+/**
+ * Free-tier friendly default for new Google AI Studio keys.
+ * gemini-2.5-flash is blocked for many new projects; 3.5 Flash can be
+ * capacity-limited. gemini-3.1-flash-lite is the reliable free-tier stand-in.
+ * Override with GEMINI_MODEL in `.env.local` if needed.
+ */
+export const DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite";
 
 export type GeminiEnv = {
   /** Account label only — never sent to Google. */
