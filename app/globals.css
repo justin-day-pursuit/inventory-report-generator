@@ -9,10 +9,11 @@
  * monitoring layout consistent.
  *
  * THEMES:
- * - Light mode (default) = brighter surfaces for easier reading — data-theme="light"
+ * - Light mode = brighter surfaces for easier reading — data-theme="light"
  * - Dark mode = the original Stockflow console look — data-theme="dark"
- * Toggle lives in the header (ThemeToggle). Preference is saved in localStorage
- * under the key "stockflow-theme".
+ * Default follows the device / OS (prefers-color-scheme). After the user uses
+ * the header ThemeToggle, that choice is saved in localStorage under
+ * "stockflow-theme" and overrides the OS until cleared.
  *
  * HOW TO MAINTAIN:
  * - Brand colors live as CSS variables under :root / [data-theme="…"].
