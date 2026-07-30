@@ -29,7 +29,8 @@
  *                            → the shared key values (identical across the lines)
  *
  * Stock status (lib/inventory.ts) uses Quantity in Stock as on-hand and
- * Quantity Sold as a restock-soon signal.
+ * Minimum Stock Threshold for understocked. Quantity Sold is shown in the UI
+ * but its restock-soon driver is switched off — search "SOLD-COVER DRIVER".
  *
  * DEPLOYMENT: mount a persistent volume at /app/data so writes survive redeploys.
  * ============================================================================
