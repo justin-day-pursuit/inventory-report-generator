@@ -3,7 +3,7 @@
  * CHECK SALES DATA PAGE (app/check/sales/page.tsx)
  * ============================================================================
  * Read-only list of inventory batches from /api/sales.
- * Quantity Sold is currently ignored for calculations, so sold amounts show as 0.
+ * Shows each batch's summed Quantity Sold (liters/kg) from the inventory CSV.
  * The "Check sales data" button on the main page is switched off.
  * ============================================================================
  */
@@ -54,7 +54,8 @@ export default function CheckSalesPage() {
             {loadedAt ? ` · loaded ${new Date(loadedAt).toLocaleString()}` : ""}
           </p>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Quantity Sold is ignored for status calculations right now, so sold amounts show as 0.
+            Amounts are the summed Quantity Sold (liters/kg) for each batch. On the
+            main page, sold volume also flags batches that may need restock soon.
           </p>
         </div>
         <ThemeToggle />

@@ -16,18 +16,20 @@
  *   Location + Product Name + Brand + Storage Condition + Sales Channel
  *
  * For each batch we compute:
- *   Quantity, Minimum Stock Threshold, Reorder Quantity, Total Value,
- *     Approx. Total Revenue  → SUM of the source lines
- *   Price per Unit           → quantity-weighted AVERAGE (summing unit prices
- *                               would be meaningless)
+ *   Quantity in Stock, Quantity Sold, Minimum Stock Threshold, Reorder Quantity,
+ *     Total Value, Approx. Total Revenue  → SUM of the source lines
+ *   Listed Quantity ("Quantity (liters/kg)") → also SUM (kept for write-back /
+ *     price weighting; not the on-hand figure shown in the list)
+ *   Price per Unit           → listed-quantity-weighted AVERAGE (summing unit
+ *                               prices would be meaningless)
  *   Expiration Date          → earliest of each line's
  *                               min(Expiration Date, Production Date + Shelf Life)
  *   Customer Locations       → running list of distinct Customer Location values
  *   Location / Sales Channel / Storage / Brand / Product Name
  *                            → the shared key values (identical across the lines)
  *
- * Quantity Sold and Quantity in Stock are read from the file when present but
- * are NOT used for batch math or status — see lib/inventory.ts.
+ * Stock status (lib/inventory.ts) uses Quantity in Stock as on-hand and
+ * Quantity Sold as a restock-soon signal.
  *
  * DEPLOYMENT: mount a persistent volume at /app/data so writes survive redeploys.
  * ============================================================================
@@ -142,6 +144,8 @@ type SourceRow = {
   salesChannel: string;
   csvProductId: string;
   quantity: number;
+  quantitySold: number;
+  quantityInStock: number;
   minimumStockThreshold: number;
   reorderQuantity: number;
   totalValue: number;
@@ -164,6 +168,8 @@ function toSourceRow(row: Record<string, string>, lineNumber: number): SourceRow
     salesChannel: (row[CSV_COLUMNS.salesChannel] ?? "").trim() || "Unspecified",
     csvProductId: (row[CSV_COLUMNS.productId] ?? "").trim(),
     quantity: toNumber(row[CSV_COLUMNS.quantity]),
+    quantitySold: toNumber(row[CSV_COLUMNS.quantitySold]),
+    quantityInStock: toNumber(row[CSV_COLUMNS.quantityInStock]),
     minimumStockThreshold: toNumber(row[CSV_COLUMNS.minimumStockThreshold]),
     reorderQuantity: toNumber(row[CSV_COLUMNS.reorderQuantity]),
     totalValue: toNumber(row[CSV_COLUMNS.totalValue]),
@@ -190,7 +196,9 @@ function aggregateBatch(rows: SourceRow[]): InventoryItem {
     return row.lineNumber > best.lineNumber ? row : best;
   });
 
-  const quantity = rows.reduce((sum, row) => sum + row.quantity, 0);
+  const listedQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
+  const quantityInStock = rows.reduce((sum, row) => sum + row.quantityInStock, 0);
+  const quantitySold = rows.reduce((sum, row) => sum + row.quantitySold, 0);
   const priceWeight = rows.reduce((sum, row) => sum + row.pricePerUnit * row.quantity, 0);
 
   const customerLocations = Array.from(
@@ -220,13 +228,16 @@ function aggregateBatch(rows: SourceRow[]): InventoryItem {
     location: newest.location,
     salesChannel: newest.salesChannel,
     storageCondition: newest.storageCondition,
-    quantity,
+    // `quantity` is Quantity in Stock — the on-hand figure the list displays.
+    quantity: quantityInStock,
+    quantitySold,
+    listedQuantity,
     minimumStockThreshold: rows.reduce((sum, row) => sum + row.minimumStockThreshold, 0),
     reorderQuantity: rows.reduce((sum, row) => sum + row.reorderQuantity, 0),
     expirationDate,
     totalValue: rows.reduce((sum, row) => sum + row.totalValue, 0),
     approxTotalRevenue: rows.reduce((sum, row) => sum + row.approxTotalRevenue, 0),
-    pricePerUnit: quantity > 0 ? priceWeight / quantity : 0,
+    pricePerUnit: listedQuantity > 0 ? priceWeight / listedQuantity : 0,
     customerLocations,
     recordDate: newest.recordDate,
   };
@@ -249,16 +260,19 @@ export async function readInventoryTable(): Promise<CsvTable> {
 }
 
 /**
- * Loads the inventory as UNIQUE BATCHES for the coordinator list.
+ * Turns CSV text into UNIQUE BATCHES for the coordinator list.
+ *
+ * Safe to call from API routes that receive an uploaded file, or from the
+ * on-disk reader below. Does not touch the filesystem itself.
  *
  * Steps:
- *   1) Read every CSV line
+ *   1) Parse the CSV text into rows
  *   2) Group by Location + Product Name + Brand + Storage Condition + Sales Channel
  *   3) Sum / earliest-date / running-list as documented at the top of this file
  *   4) Sort by name, then location, then sales channel for a stable table order
  */
-export async function readInventory(): Promise<InventoryItem[]> {
-  const table = await readInventoryTable();
+export function inventoryFromCsvText(csvText: string): InventoryItem[] {
+  const table = parseCsv(csvText);
   const groups = new Map<string, SourceRow[]>();
 
   table.rows.forEach((row, index) => {
@@ -286,20 +300,40 @@ export async function readInventory(): Promise<InventoryItem[]> {
 }
 
 /**
+ * Loads the on-disk inventory CSV and returns UNIQUE BATCHES.
+ * Used by APIs that still read data/inventory/inventory.csv directly.
+ */
+export async function readInventory(): Promise<InventoryItem[]> {
+  const raw = await fs.readFile(DATA_PATHS.inventoryFile, "utf8").catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
+    throw error;
+  });
+  return inventoryFromCsvText(raw);
+}
+
+/**
+ * Reads the raw on-disk inventory CSV as plain text (for "Load from codebase").
+ * Returns an empty string when the file is missing.
+ */
+export async function readInventoryCsvText(): Promise<string> {
+  try {
+    return await fs.readFile(DATA_PATHS.inventoryFile, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
+    throw error;
+  }
+}
+
+/**
  * Sales department view derived from the inventory spreadsheet.
- * One row per batch, using the batch's summed Quantity as a stand-in sold figure
- * is intentionally NOT done — Quantity Sold is ignored for now, so this feed
- * simply lists each batch name with quantitySold: 0 until a real sales feed returns.
- *
+ * One row per batch with the summed Quantity Sold (liters/kg).
  * Kept so /api/sales and the check page keep working while sync is paused.
  */
 export async function readSales(): Promise<SalesItem[]> {
   const items = await readInventory();
-  // Surface each batch so the check page is not empty; sold amount stays 0
-  // because Quantity Sold is out of scope for calculations right now.
   return items.map((item) => ({
     name: item.name,
-    quantitySold: 0,
+    quantitySold: item.quantitySold,
   }));
 }
 
@@ -379,9 +413,10 @@ function describeNewProduct(
  * Copies the batch's fields onto one spreadsheet row (the newest source line).
  * Only the cells this app manages are touched; every other column is left alone.
  *
- * NOTE: A batch is a SUM of several lines. Writing the summed Quantity back onto
- * a single line is a lossy simplification used only when the paused Update flow
- * is re-enabled. Restoring from inventory.seed.csv undoes that.
+ * NOTE: A batch is a SUM of several lines. Writing the summed Quantity in Stock /
+ * Quantity Sold / listed Quantity back onto a single line is a lossy
+ * simplification used only when the paused Update flow is re-enabled.
+ * Restoring from inventory.seed.csv undoes that.
  */
 function writeItemIntoRow(
   row: Record<string, string>,
@@ -394,7 +429,9 @@ function writeItemIntoRow(
   setTextCell(row, CSV_COLUMNS.location, item.location);
   setTextCell(row, CSV_COLUMNS.salesChannel, item.salesChannel);
   setTextCell(row, CSV_COLUMNS.storageCondition, item.storageCondition);
-  setNumberCell(row, CSV_COLUMNS.quantity, item.quantity);
+  setNumberCell(row, CSV_COLUMNS.quantity, item.listedQuantity);
+  setNumberCell(row, CSV_COLUMNS.quantityInStock, item.quantity);
+  setNumberCell(row, CSV_COLUMNS.quantitySold, item.quantitySold);
   setNumberCell(row, CSV_COLUMNS.minimumStockThreshold, item.minimumStockThreshold);
   setNumberCell(row, CSV_COLUMNS.reorderQuantity, item.reorderQuantity);
   setTextCell(row, CSV_COLUMNS.expirationDate, item.expirationDate);

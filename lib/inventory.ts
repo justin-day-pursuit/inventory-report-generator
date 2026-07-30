@@ -19,14 +19,21 @@
  * every brand of a product shares the same id.
  *
  * HOW NUMBERS ARE COMBINED (done in lib/data-store.ts, used here as-is):
- *   Quantity / Minimum Stock Threshold / Reorder Quantity / money totals
- *     → sum of the CSV lines in the batch
+ *   Quantity in Stock / Quantity Sold / Minimum Stock Threshold / Reorder Quantity /
+ *     money totals → sum of the CSV lines in the batch
+ *   Listed Quantity ("Quantity (liters/kg)") → also summed (kept for write-back /
+ *     price weighting; not the on-hand figure shown in the list)
  *   Expiration date
  *     → earliest of (Expiration Date) and (Production Date + Shelf Life days)
  *       across every line in the batch
  *   Customer locations
  *     → running list of the distinct Customer Location values in the batch
- * Quantity Sold and Quantity in Stock are intentionally ignored for status math.
+ *
+ * STOCK STATUS uses Quantity in Stock as on-hand. Understocked / restock-soon
+ * is driven by BOTH of these (either one is enough):
+ *   1) Quantity in Stock ≤ Minimum Stock Threshold (reorder line)
+ *   2) Quantity in Stock ≤ Quantity Sold (sold-cover / restock-soon signal)
+ * Overstocked still uses the threshold + reorder multiple on in-stock levels.
  *
  * HOW TO MAINTAIN:
  * - Alert / filter windows (days to expiry, overstock multiple, test "today")
@@ -76,7 +83,7 @@ export const DEFAULT_REORDER_QUANTITY = 100;
 /**
  * How much stock counts as overstocked.
  * A batch is overstocked when:
- *   quantity >= minimumStockThreshold + (this × reorderQuantity)
+ *   quantityInStock >= minimumStockThreshold + (this × reorderQuantity)
  * Raise this number to flag fewer overstocked batches; lower it to flag more.
  */
 export const OVERSTOCK_REORDER_MULTIPLE = 5;
@@ -115,11 +122,21 @@ export type InventoryItem = {
   /** CSV "Storage Condition", for example "Refrigerated". */
   storageCondition: string;
   /**
-   * Sum of "Quantity (liters/kg)" across the batch.
-   * This is the on-hand figure used for stock-status math (Quantity Sold and
-   * Quantity in Stock are ignored on purpose for now).
+   * Sum of "Quantity in Stock (liters/kg)" across the batch.
+   * This is the on-hand figure shown in the list and used for stock-status math.
    */
   quantity: number;
+  /**
+   * Sum of "Quantity Sold (liters/kg)" across the batch.
+   * Second understock driver alongside Minimum Stock Threshold: when on-hand
+   * stock is at or below sold volume, the batch is flagged restock soon.
+   */
+  quantitySold: number;
+  /**
+   * Sum of "Quantity (liters/kg)" across the batch (listed / produced volume).
+   * Kept for CSV write-back and price weighting — not the display on-hand figure.
+   */
+  listedQuantity: number;
   /** Sum of "Minimum Stock Threshold (liters/kg)" across the batch. */
   minimumStockThreshold: number;
   /** Sum of "Reorder Quantity (liters/kg)" across the batch. */
@@ -303,13 +320,41 @@ export function classifyExpirationStatus(
 }
 
 /**
- * Stock Status column — only looks at Quantity vs the summed thresholds.
- * Quantity Sold and Quantity in Stock are ignored (see file header).
+ * True when on-hand Quantity in Stock is at or below the summed Minimum Stock
+ * Threshold (with the default floor when a batch has no threshold).
+ * This is the classic reorder-line driver — kept in addition to sold-cover.
+ */
+export function isBelowMinimumStock(item: InventoryItem): boolean {
+  const onHand = item.quantity;
+  return onHand > 0 && onHand <= minimumStockLevel(item);
+}
+
+/**
+ * True when remaining stock is at or below what has already sold in the batch.
+ * That means less than (or equal to) one "sold period" of cover left — a
+ * restock-soon signal even if the minimum-threshold line has not been hit yet.
+ * Used together with isBelowMinimumStock (either driver flags understocked).
+ */
+export function needsRestockSoon(item: InventoryItem): boolean {
+  const onHand = item.quantity;
+  const sold = item.quantitySold;
+  return onHand > 0 && sold > 0 && onHand <= sold;
+}
+
+/**
+ * Stock Status column — Quantity in Stock is on-hand.
+ *
+ * Understocked / restock-soon uses BOTH drivers (either one is enough):
+ *   1) isBelowMinimumStock — in stock ≤ Minimum Stock Threshold
+ *   2) needsRestockSoon — in stock ≤ Quantity Sold
+ *
+ * Priority:
+ *   sold out → understocked (min threshold OR sold-cover) → overstocked → healthy
  */
 export function classifyStockStatus(item: InventoryItem): StockStatus {
   const onHand = item.quantity;
   if (onHand <= 0) return "out_of_stock";
-  if (onHand <= minimumStockLevel(item)) return "understocked";
+  if (isBelowMinimumStock(item) || needsRestockSoon(item)) return "understocked";
   if (onHand >= overstockLevel(item)) return "overstocked";
   return "healthy";
 }
@@ -390,19 +435,26 @@ export function buildAlerts(items: InventoryItem[], now: Date = new Date()): Inv
         location: item.location,
         message: `Sold out at ${item.location} — reorder ${round1(item.reorderQuantity || DEFAULT_REORDER_QUANTITY)}.`,
       });
-    } else if (onHand <= minimum) {
+    } else if (isBelowMinimumStock(item)) {
       alerts.push({
         kind: "understocked",
         name: item.name,
         location: item.location,
-        message: `Only ${round1(onHand)} left at ${item.location} (reorder at ${round1(minimum)}; suggested ${round1(item.reorderQuantity)}).`,
+        message: `Only ${round1(onHand)} in stock at ${item.location} (below minimum ${round1(minimum)}; suggested reorder ${round1(item.reorderQuantity)}).`,
+      });
+    } else if (needsRestockSoon(item)) {
+      alerts.push({
+        kind: "understocked",
+        name: item.name,
+        location: item.location,
+        message: `Restock soon at ${item.location}: ${round1(onHand)} in stock vs ${round1(item.quantitySold)} already sold (min threshold ${round1(minimum)}; suggested reorder ${round1(item.reorderQuantity || DEFAULT_REORDER_QUANTITY)}).`,
       });
     } else if (onHand >= overstock) {
       alerts.push({
         kind: "overstocked",
         name: item.name,
         location: item.location,
-        message: `${round1(onHand)} on hand at ${item.location} is above the overstock line of ${round1(overstock)}.`,
+        message: `${round1(onHand)} in stock at ${item.location} is above the overstock line of ${round1(overstock)}.`,
       });
     }
   }
@@ -560,6 +612,7 @@ export function applyInventoryUpdates(
     const batch = findBatch(delivery.name);
     if (batch) {
       batch.quantity += delivery.quantity;
+      batch.listedQuantity += delivery.quantity;
       if (delivery.expirationDate) {
         // Keep the earlier (more urgent) expiration date.
         if (!batch.expirationDate || delivery.expirationDate < batch.expirationDate) {
@@ -589,6 +642,8 @@ export function applyInventoryUpdates(
       salesChannel,
       storageCondition,
       quantity: delivery.quantity,
+      quantitySold: 0,
+      listedQuantity: delivery.quantity,
       minimumStockThreshold: DEFAULT_MINIMUM_STOCK_THRESHOLD,
       reorderQuantity: DEFAULT_REORDER_QUANTITY,
       expirationDate: delivery.expirationDate || "",
@@ -603,9 +658,9 @@ export function applyInventoryUpdates(
   for (const sale of sales) {
     const batch = findBatch(sale.name);
     if (!batch) continue;
-    // Status math ignores quantity sold, but an explicit update still reduces
-    // the Quantity column so the list stays truthful after a sync.
+    // Sales reduce Quantity in Stock and accumulate Quantity Sold.
     batch.quantity = Math.max(0, batch.quantity - sale.quantitySold);
+    batch.quantitySold += sale.quantitySold;
   }
 
   return batches;
@@ -683,7 +738,7 @@ export function generateStockReport(items: InventoryItem[], now: Date = new Date
       ? `${totals.expiredCount} expired / ${totals.expiringSoonCount} expiring within ${EXPIRING_SOON_DAYS} days.`
       : "No immediate expiration risk.",
     totals.understockedCount + totals.outOfStockCount > 0
-      ? `${totals.outOfStockCount} sold out / ${totals.understockedCount} under the reorder line.`
+      ? `${totals.outOfStockCount} sold out / ${totals.understockedCount} understocked or need restock soon.`
       : "Reorder lines are currently covered.",
   ].join(" ");
 
@@ -735,7 +790,7 @@ function buildRecommendations(lines: StockLine[]): string[] {
       `Place supplier reorders for ${needReorder.length} batch(es): ${listSample(
         needReorder.map(
           (l) =>
-            `${l.name} @ ${l.location} (on hand ${round1(l.quantity)}, reorder ${round1(l.reorderQuantity)})`
+            `${l.name} @ ${l.location} (in stock ${round1(l.quantity)}, sold ${round1(l.quantitySold)}, reorder ${round1(l.reorderQuantity)})`
         )
       )}.`
     );
