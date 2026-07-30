@@ -10,13 +10,14 @@ CSV lines that share **Location + Product Name + Brand + Storage Condition + Sal
 
 | Field | Rule |
 | --- | --- |
-| Quantity, Minimum Stock Threshold, Reorder Quantity, Total Value, Approx. Total Revenue | Sum of the source lines |
-| Price per Unit | Quantity-weighted average |
+| Quantity in Stock, Quantity Sold, Minimum Stock Threshold, Reorder Quantity, Total Value, Approx. Total Revenue | Sum of the source lines |
+| Listed Quantity (`Quantity (liters/kg)`) | Also summed (write-back / price weighting only — not the list on-hand figure) |
+| Price per Unit | Listed-quantity-weighted average |
 | Expiration | Earliest of each line's `min(Expiration Date, Production Date + Shelf Life days)` |
 | Customer locations | Running list of distinct `Customer Location` values |
 | Name | Brand + Product Name |
 
-**Ignored for status math (for now):** `Quantity Sold` and `Quantity in Stock`. Stock status uses summed **Quantity** vs summed **Minimum Stock Threshold** / **Reorder Quantity**.
+**Stock status:** on-hand is summed **Quantity in Stock**. A batch is understocked when stock is at or below the summed **Minimum Stock Threshold**, or when stock is at or below summed **Quantity Sold** (restock-soon cover). Overstock still uses the threshold + reorder multiple.
 
 **Status clock:** shelf life is measured against `APP_REFERENCE_DATE` in `lib/inventory.ts` (default `2018-11-20`, near the earliest expiration in the file), not the real calendar, so this historical export still shows a useful mix of expired / expiring / ok. Switch `STATUS_CLOCK` to `"real_today"` for a live feed.
 
@@ -108,7 +109,7 @@ npm run docker:run
 2. **Display inventory** — appears after a file is staged; transforms the CSV into batches and populates alert badges + the list. The page scrolls so the **alert badges** sit at the top.
 3. **Refresh** — clears staged and displayed data (same as a full page reload). Load again to continue.
 4. **Alert cards** (after Display) summarize need-action (morning aggregate), sold out, understocked, expiring soon, and expired batches. Each number is a batch count. Click a card to apply that filter to the inventory list. (Overstocked has no summary badge; use the Show filter or Stock Status column.)
-5. **Inventory batches** (default filter **Needs action**) lists batches that are expired, expiring within 14 days, sold out, or understocked. Columns: Name, Location, Sales Channel, Storage Conditions, Quantity, Expiration, Expiration Status, Stock Status. Switch the filter to Overstocked / Healthy / All batches as needed. 50 rows per page by default (Rows dropdown goes to 500).
+5. **Inventory batches** (default filter **Needs action**) lists batches that are expired, expiring within 14 days, sold out, or understocked (below min threshold, or in-stock ≤ quantity sold). Columns: Name, Location, Sales Channel, Storage Conditions, Quantity in Stock (liters/kg), Quantity Sold (liters/kg), Expiration, Expiration Status, Stock Status. Switch the filter to Overstocked / Healthy / All batches as needed. 50 rows per page by default (Rows dropdown goes to 500).
 6. **Department data sync** — commented out in `app/page.tsx` (search `DEPARTMENT DATA SYNC (SWITCHED OFF)` to restore). Report success/error messages show in the curated report section.
 7. **Generate report** — curated status report from the batches on screen; the page scrolls so the **report section** sits at the top. Status banners appear in this section.
 8. **Theme toggle** — defaults to the device / OS theme (system light → light, system dark → dark). After you toggle, that choice is remembered in the browser.

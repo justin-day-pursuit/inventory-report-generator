@@ -125,6 +125,8 @@ export function parseInventoryItems(value: unknown): InventoryItem[] {
       salesChannel,
       storageCondition,
       quantity,
+      quantitySold: asNumber(row.quantitySold) ?? 0,
+      listedQuantity: asNumber(row.listedQuantity) ?? quantity,
       minimumStockThreshold: asNumber(row.minimumStockThreshold) ?? 0,
       reorderQuantity: asNumber(row.reorderQuantity) ?? 0,
       expirationDate: asString(row.expirationDate) ?? "",

@@ -22,6 +22,9 @@
  *
  * HOW TO MAINTAIN:
  * - DEFAULT_PAGE_SIZE / PAGE_SIZE_OPTIONS control how many rows show per page.
+ * - List columns show Quantity in Stock and Quantity Sold (liters/kg). On-hand
+ *   stock drives sold-out / overstock; Quantity Sold also flags restock-soon
+ *   (in stock ≤ sold) as understocked — see needsRestockSoon in lib/inventory.ts.
  * - Badge numbers come from summarizeBatchStatusCounts via /api/inventory/transform
  *   (batch counts, not alert-message counts). "Need action" is the morning aggregate.
  * - Clicking a badge sets the inventory list filter (applyBadgeFilter) without scrolling.
@@ -42,6 +45,8 @@ import {
   classifyExpirationStatus,
   classifyStockStatus,
   filterInventory,
+  minimumStockLevel,
+  needsRestockSoon,
   type ActionFilter,
   type ExpirationStatus,
   /* ITEM STATUS CHIPS (SWITCHED OFF) — type for the commented chip strip below.
@@ -657,14 +662,19 @@ export default function Home() {
               </div>
 
               <div className="inventory-scroll">
-                <table className="w-full min-w-[960px] border-collapse text-sm">
+                <table className="w-full min-w-[1100px] border-collapse text-sm">
                   <thead className="table-head sticky top-0 text-left text-[var(--muted)]">
                     <tr>
                       <th className="px-4 py-3 font-medium">Name</th>
                       <th className="px-4 py-3 font-medium">Location</th>
                       <th className="px-4 py-3 font-medium">Sales Channel</th>
                       <th className="px-4 py-3 font-medium">Storage Conditions</th>
-                      <th className="px-4 py-3 text-right font-medium">Quantity</th>
+                      <th className="px-4 py-3 text-right font-medium">
+                        Quantity in Stock (liters/kg)
+                      </th>
+                      <th className="px-4 py-3 text-right font-medium">
+                        Quantity Sold (liters/kg)
+                      </th>
                       <th className="px-4 py-3 font-medium">Expiration</th>
                       <th className="px-4 py-3 font-medium">Expiration Status</th>
                       <th className="px-4 py-3 font-medium">Stock Status</th>
@@ -673,7 +683,7 @@ export default function Home() {
                   <tbody>
                     {pageRows.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-4 py-10 text-center text-[var(--muted)]">
+                        <td colSpan={9} className="px-4 py-10 text-center text-[var(--muted)]">
                           No matching batches. Try “All batches” or clear the search.
                         </td>
                       </tr>
@@ -681,6 +691,10 @@ export default function Home() {
                       pageRows.map((item) => {
                         const expirationStatus = classifyExpirationStatus(item);
                         const stockStatus = classifyStockStatus(item);
+                        const restockSoon =
+                          stockStatus === "understocked" &&
+                          needsRestockSoon(item) &&
+                          item.quantity > minimumStockLevel(item);
                         return (
                           <tr
                             key={item.batchKey}
@@ -688,7 +702,7 @@ export default function Home() {
                           >
                             <td
                               className="px-4 py-3 font-medium"
-                              title={`${item.sourceRowCount.toLocaleString()} dataset row(s) · reorder ${formatUnits(item.reorderQuantity)} · min ${formatUnits(item.minimumStockThreshold)}`}
+                              title={`${item.sourceRowCount.toLocaleString()} dataset row(s) · reorder ${formatUnits(item.reorderQuantity)} · min ${formatUnits(item.minimumStockThreshold)} · listed ${formatUnits(item.listedQuantity)}`}
                             >
                               {item.name}
                             </td>
@@ -709,12 +723,22 @@ export default function Home() {
                             <td className="px-4 py-3 text-right tabular-nums">
                               {formatUnits(item.quantity)}
                             </td>
+                            <td
+                              className="px-4 py-3 text-right tabular-nums"
+                              title={
+                                needsRestockSoon(item)
+                                  ? "In stock is at or below quantity sold — restock soon"
+                                  : undefined
+                              }
+                            >
+                              {formatUnits(item.quantitySold)}
+                            </td>
                             <td className="px-4 py-3">{item.expirationDate}</td>
                             <td className="px-4 py-3">
                               <ExpirationChip status={expirationStatus} />
                             </td>
                             <td className="px-4 py-3">
-                              <StockChip status={stockStatus} />
+                              <StockChip status={stockStatus} restockSoon={restockSoon} />
                             </td>
                           </tr>
                         );
@@ -826,36 +850,46 @@ export default function Home() {
                 </p>
 
                 <div className="mt-2 overflow-x-auto rounded-xl border border-[var(--panel-border)]">
-                  <table className="w-full min-w-[820px] border-collapse text-sm">
+                  <table className="w-full min-w-[960px] border-collapse text-sm">
                     <thead className="bg-[var(--surface-soft)] text-left text-[var(--muted)]">
                       <tr>
                         <th className="px-3 py-2 font-medium">Name</th>
                         <th className="px-3 py-2 font-medium">Location</th>
                         <th className="px-3 py-2 font-medium">Channel</th>
-                        <th className="px-3 py-2 text-right font-medium">Quantity</th>
+                        <th className="px-3 py-2 text-right font-medium">In stock</th>
+                        <th className="px-3 py-2 text-right font-medium">Sold</th>
                         <th className="px-3 py-2 font-medium">Expiration</th>
                         <th className="px-3 py-2 font-medium">Expiration Status</th>
                         <th className="px-3 py-2 font-medium">Stock Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {report.lines.slice(0, REPORT_ROW_LIMIT).map((line) => (
-                        <tr key={line.batchKey} className="row-divider">
-                          <td className="px-3 py-2">{line.name}</td>
-                          <td className="px-3 py-2">{line.location}</td>
-                          <td className="px-3 py-2">{line.salesChannel}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">
-                            {formatUnits(line.quantity)}
-                          </td>
-                          <td className="px-3 py-2">{line.expirationDate}</td>
-                          <td className="px-3 py-2">
-                            <ExpirationChip status={line.expirationStatus} />
-                          </td>
-                          <td className="px-3 py-2">
-                            <StockChip status={line.stockStatus} />
-                          </td>
-                        </tr>
-                      ))}
+                      {report.lines.slice(0, REPORT_ROW_LIMIT).map((line) => {
+                        const restockSoon =
+                          line.stockStatus === "understocked" &&
+                          needsRestockSoon(line) &&
+                          line.quantity > minimumStockLevel(line);
+                        return (
+                          <tr key={line.batchKey} className="row-divider">
+                            <td className="px-3 py-2">{line.name}</td>
+                            <td className="px-3 py-2">{line.location}</td>
+                            <td className="px-3 py-2">{line.salesChannel}</td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {formatUnits(line.quantity)}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {formatUnits(line.quantitySold)}
+                            </td>
+                            <td className="px-3 py-2">{line.expirationDate}</td>
+                            <td className="px-3 py-2">
+                              <ExpirationChip status={line.expirationStatus} />
+                            </td>
+                            <td className="px-3 py-2">
+                              <StockChip status={line.stockStatus} restockSoon={restockSoon} />
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -959,7 +993,14 @@ function ExpirationChip({ status }: { status: ExpirationStatus }) {
 }
 
 /** Colour-coded wording for the Stock Status column. */
-function StockChip({ status }: { status: StockStatus }) {
+function StockChip({
+  status,
+  restockSoon,
+}: {
+  status: StockStatus;
+  /** When true, show "restock soon" instead of "understocked" (sold-cover signal). */
+  restockSoon?: boolean;
+}) {
   const styles: Record<StockStatus, string> = {
     healthy: "text-[var(--accent)]",
     understocked: "text-[var(--warn)]",
@@ -968,7 +1009,7 @@ function StockChip({ status }: { status: StockStatus }) {
   };
   const labels: Record<StockStatus, string> = {
     healthy: "healthy",
-    understocked: "understocked",
+    understocked: restockSoon ? "restock soon" : "understocked",
     overstocked: "overstocked",
     out_of_stock: "sold out",
   };
