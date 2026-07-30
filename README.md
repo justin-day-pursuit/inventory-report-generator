@@ -104,11 +104,13 @@ npm run docker:run
 
 ## How to use the page
 
-1. **Alert cards** summarize sold out, understocked, overstocked, expiring soon, and expired batches.
-2. **Inventory batches** (default filter **Needs action**) lists batches that are expired, expiring within 14 days, sold out, or understocked. Columns: Name, Location, Sales Channel, Storage Conditions, Quantity, Expiration, Expiration Status, Stock Status. Switch the filter to Overstocked / Healthy / All batches as needed. 50 rows per page by default (Rows dropdown goes to 500).
-3. **Department data sync** — paused: Load / Check / Update buttons are visible but their click handlers are commented out (see `app/page.tsx`).
-4. **Theme toggle** — defaults to light mode.
-5. **Generate report** — curated status report with reorder and shelf-life recommendations.
+1. **Load inventory data** — drop a dairy CSV from your device, or press **Load inventory from codebase**. Nothing is shown yet.
+2. **Display inventory** — appears after a file is staged; transforms the CSV into batches and populates alert badges + the list. The page scrolls so **Today's date (status clock)** sits at the top.
+3. **Refresh** — clears staged and displayed data (same as a full page reload). Load again to continue.
+4. **Alert cards** summarize sold out, understocked, overstocked, expiring soon, and expired batches (only after Display).
+5. **Inventory batches** (default filter **Needs action**) lists batches that need a decision today. Columns: Name, Location, Sales Channel, Storage Conditions, Quantity, Expiration, Expiration Status, Stock Status.
+6. **Generate report** — curated status report from the batches on screen.
+7. **Theme toggle** — defaults to light mode.
 
 ## Data layout
 

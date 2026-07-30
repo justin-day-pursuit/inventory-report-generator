@@ -3,7 +3,9 @@
  * API: GET /api/inventory
  * ============================================================================
  * Returns the unique inventory BATCHES from data/inventory/inventory.csv together
- * with alert badge counts. The main page calls this on load and on Refresh.
+ * with alert badge counts. Kept for direct API use and health of the on-disk file.
+ * The main webpage no longer auto-calls this on load — it stages CSV text first
+ * (drop zone or /api/inventory/source) then posts to /api/inventory/transform.
  *
  * A batch is Location + Product Name + Brand + Storage Condition + Sales Channel.
  * `sourceRecordCount` is how many CSV lines those batches were built from.
