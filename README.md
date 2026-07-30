@@ -105,12 +105,12 @@ npm run docker:run
 ## How to use the page
 
 1. **Load inventory data** — drop a dairy CSV from your device, or press **Load inventory from codebase**. Nothing is shown yet.
-2. **Display inventory** — appears after a file is staged; transforms the CSV into batches and populates alert badges + the list. The page scrolls so **Today's Date** (status clock) sits at the top.
+2. **Display inventory** — appears after a file is staged; transforms the CSV into batches and populates alert badges + the list. The page scrolls so the **alert badges** sit at the top.
 3. **Refresh** — clears staged and displayed data (same as a full page reload). Load again to continue.
 4. **Alert cards** (after Display) summarize need-action (morning aggregate), sold out, understocked, expiring soon, and expired batches. Each number is a batch count. Click a card to apply that filter to the inventory list. (Overstocked has no summary badge; use the Show filter or Stock Status column.)
 5. **Inventory batches** (default filter **Needs action**) lists batches that are expired, expiring within 14 days, sold out, or understocked. Columns: Name, Location, Sales Channel, Storage Conditions, Quantity, Expiration, Expiration Status, Stock Status. Switch the filter to Overstocked / Healthy / All batches as needed. 50 rows per page by default (Rows dropdown goes to 500).
 6. **Department data sync** — commented out in `app/page.tsx` (search `DEPARTMENT DATA SYNC (SWITCHED OFF)` to restore). Report success/error messages show in the curated report section.
-7. **Generate report** — curated status report from the batches on screen; status banners appear in this section.
+7. **Generate report** — curated status report from the batches on screen; the page scrolls so the **report section** sits at the top. Status banners appear in this section.
 8. **Theme toggle** — defaults to the device / OS theme (system light → light, system dark → dark). After you toggle, that choice is remembered in the browser.
 
 ## Data layout
