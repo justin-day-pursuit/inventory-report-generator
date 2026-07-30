@@ -128,9 +128,25 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ReportResponse | null>(null);
 
-  /** Anchor for "scroll today's date to the top" after Display. */
-  const todaysDateRef = useRef<HTMLParagraphElement | null>(null);
+  /** Anchor for "scroll badges to the top" after Display. */
+  const badgesRef = useRef<HTMLElement | null>(null);
+  /** Anchor for "scroll report section to the top" after Generate report. */
+  const reportSectionRef = useRef<HTMLElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  /**
+   * Smooth-scrolls a section to the top of the viewport after React paints it.
+   * Pass a getter (or read a ref inside) so newly mounted targets — like the
+   * badge strip after Display — are found after the commit, not before.
+   * Two animation frames wait for that paint.
+   */
+  function scrollSectionToTop(getTarget: () => HTMLElement | null) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        getTarget()?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  }
 
   /**
    * Clears staged CSV and every displayed result.
@@ -231,7 +247,7 @@ export default function Home() {
 
   /**
    * Transforms the staged CSV into batches + alerts, shows them, and scrolls
-   * so the today's-date / status-clock line sits at the top of the viewport.
+   * so the alert badge strip sits at the top of the viewport.
    */
   async function displayInventory() {
     if (!stagedCsvText) return;
@@ -261,10 +277,7 @@ export default function Home() {
       setMessage(
         `Showing ${(data.count ?? 0).toLocaleString()} batches from ${stagedLabel ?? "CSV"}.`
       );
-      // Wait one frame so the date line is in the DOM, then pin it to the top.
-      requestAnimationFrame(() => {
-        todaysDateRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
+      scrollSectionToTop(() => badgesRef.current);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to display inventory.");
     } finally {
@@ -275,6 +288,7 @@ export default function Home() {
   /**
    * Builds a curated report from the batches currently on screen (not from disk),
    * so a dropped CSV gets the same report treatment as the codebase file.
+   * After a successful generate, scrolls so the report section is at the top.
    */
   async function generateReport() {
     if (inventory.length === 0) return;
@@ -289,7 +303,8 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Failed to generate report.");
       setReport(data as ReportResponse);
-      setMessage("Curated inventory report ready — scroll down to review.");
+      setMessage("Curated inventory report ready.");
+      scrollSectionToTop(() => reportSectionRef.current);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate report.");
     } finally {
@@ -363,15 +378,10 @@ export default function Home() {
             low stock, upcoming expirations, and reorder candidates.
           </p>
           {/*
-            STATUS LINE — scroll target after Display.
-            Shows Today's Date (APP_REFERENCE_DATE), expiring window, and
-            how many batches need action once inventory is displayed.
+            STATUS LINE — Today's Date (APP_REFERENCE_DATE), expiring window,
+            and how many batches need action once inventory is displayed.
           */}
-          <p
-            id="todays-date"
-            ref={todaysDateRef}
-            className="mt-2 scroll-mt-6 text-[var(--muted)]"
-          >
+          <p id="todays-date" className="mt-2 text-[var(--muted)]">
             <span className="font-bold">Today&apos;s Date</span>:{" "}
             <span className="font-mono">{referenceDate}</span>
             {" · "}
@@ -498,8 +508,10 @@ export default function Home() {
             Click a badge to set the Show filter (no page scroll).
           */}
           <section
+            ref={badgesRef}
+            id="inventory-alerts"
             aria-label="Inventory alerts"
-            className="anim-rise anim-rise-delay-1 mb-6 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5"
+            className="anim-rise anim-rise-delay-1 mb-6 scroll-mt-6 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5"
           >
             <AlertCard
               label="Need action"
@@ -743,7 +755,12 @@ export default function Home() {
             Success/error banners for Display + Generate report show here once
             inventory is on screen (staging messages stay in the load section).
           */}
-          <section aria-label="Generate inventory report" className="mb-10">
+          <section
+            ref={reportSectionRef}
+            id="inventory-report"
+            aria-label="Generate inventory report"
+            className="mb-10 scroll-mt-6"
+          >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="font-display text-xl font-semibold">Curated inventory report</h2>
