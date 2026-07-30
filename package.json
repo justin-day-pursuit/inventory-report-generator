@@ -18,9 +18,11 @@
     "docker:run": "docker run --rm -p 3000:3000 -v stockflow-data:/app/data --name stockflow stockflow"
   },
   "dependencies": {
+    "@google/genai": "^2.15.0",
     "next": "^16.2.11",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

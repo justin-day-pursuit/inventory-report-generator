@@ -8,7 +8,9 @@
  *   2) Load a dairy CSV (drag-and-drop from the device, or load the codebase file)
  *   3) Display button — appears only after a CSV is staged; runs the batch transform
  *   4) Alert cards + inventory batches (only after Display)
- *   5) Curated stock report (only after Display)
+ *   5) Curated stock report (only after Display) — Generate report asks Google
+ *      Gemini for a readable weekly narrative (classifications, outliers, charts)
+ *      using the staged raw CSV + the transformed batches on screen
  *
  * START / REFRESH RULE:
  * On first paint and whenever Refresh is pressed, all staged CSV text and all
@@ -33,6 +35,8 @@
  * - Department data sync panel is commented out on main — not shown in this load-first UI.
  * - Report success/error banners also appear in the Curated inventory report section
  *   once data is displayed; staging messages stay in the load section.
+ * - Generate report needs GEMINI_API_KEY in `.env.local` (see `.env.example`).
+ *   The key stays on the server — never add NEXT_PUBLIC_ in front of it.
  * ============================================================================
  */
 
@@ -86,9 +90,51 @@ const EMPTY_COUNTS: AlertCounts = {
   expired: 0,
 };
 
+/** Severity colours used by AI classifications / outliers. */
+type AiSeverity = "critical" | "high" | "medium" | "low" | "ok";
+
+type AiChartBar = { label: string; value: number };
+
+/**
+ * Shape of the AI narrative block from /api/report.
+ * HOW TO MAINTAIN: field names must stay in sync with lib/ai-report.ts.
+ */
+type AiNarrative = {
+  headline: string;
+  weekNarrative: string;
+  executiveSummary: string;
+  classifications: {
+    label: string;
+    count: number;
+    meaning: string;
+    severity: AiSeverity;
+  }[];
+  outliers: {
+    name: string;
+    location: string;
+    why: string;
+    action: string;
+    severity: AiSeverity;
+  }[];
+  chartData: {
+    stockStatus: AiChartBar[];
+    expirationStatus: AiChartBar[];
+    actionMix: AiChartBar[];
+  };
+  recommendations: { priority: number; title: string; detail: string }[];
+  supplierNotes: string[];
+};
+
 type ReportResponse = StockReport & {
   lineTotal?: number;
   alertTotal?: number;
+  ai?: AiNarrative;
+  aiMeta?: {
+    source: "gemini" | "fallback";
+    model: string | null;
+    accountLabel: string | null;
+    warning?: string;
+  };
 };
 
 /** Shows a stock figure with thousands separators and at most two decimals. */
@@ -292,24 +338,39 @@ export default function Home() {
   }
 
   /**
-   * Builds a curated report from the batches currently on screen (not from disk),
-   * so a dropped CSV gets the same report treatment as the codebase file.
-   * After a successful generate, scrolls so the report section is at the top.
+   * Asks the server for a curated AI report from the batches on screen.
+   * Sends the staged raw CSV text too, so Gemini sees both raw + transformed data
+   * even when the file was dropped from the device (not only the on-disk CSV).
+   * Credentials stay on the server — this browser call never includes the API key.
+   * After success, scrolls so the report section sits at the top.
    */
   async function generateReport() {
     if (inventory.length === 0) return;
     setReporting(true);
     setError(null);
+    setMessage(null);
     try {
       const res = await fetch("/api/report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: inventory }),
+        body: JSON.stringify({
+          items: inventory,
+          // Staged file text = the RAW digest for Gemini (optional but preferred).
+          csvText: stagedCsvText ?? undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Failed to generate report.");
-      setReport(data as ReportResponse);
-      setMessage("Curated inventory report ready.");
+      const payload = data as ReportResponse;
+      setReport(payload);
+      if (payload.aiMeta?.source === "gemini") {
+        setMessage("AI curated inventory report ready for the operations manager.");
+      } else {
+        setMessage(
+          payload.aiMeta?.warning ??
+            "Rules-based inventory report ready (AI key not used)."
+        );
+      }
       scrollSectionToTop(() => reportSectionRef.current);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate report.");
@@ -776,9 +837,17 @@ export default function Home() {
           </section>
 
           {/*
-            CURATED INVENTORY REPORT
-            Success/error banners for Display + Generate report show here once
-            inventory is on screen (staging messages stay in the load section).
+            CURATED INVENTORY REPORT (AI + rules)
+            WHAT THE USER SEES after Display:
+            Click Generate report → server uses staged raw CSV + on-screen batches,
+            asks Google Gemini for a manager-friendly write-up, then this section
+            shows headline, classifications, charts, outliers, recommendations,
+            supplier notes, and the urgent batch table (In stock / Sold columns).
+
+            HOW TO MAINTAIN:
+            - Button label / blurb: edit the <h2> and <p> below.
+            - Gemini setup: GEMINI_API_USERNAME + GEMINI_API_KEY in `.env.local`.
+            - Chart colours: severityColor / BarChartCard helpers at file bottom.
           */}
           <section
             ref={reportSectionRef}
@@ -790,8 +859,8 @@ export default function Home() {
               <div>
                 <h2 className="font-display text-xl font-semibold">Curated inventory report</h2>
                 <p className="text-sm text-[var(--muted)]">
-                  Weekly-style status report from the batches on screen — ready for the
-                  operations manager.
+                  AI weekly status for FreshRoute&apos;s operations manager — stock risk,
+                  shelf-life outliers, and supplier next steps from the batches on screen.
                 </p>
               </div>
               <button
@@ -800,7 +869,7 @@ export default function Home() {
                 disabled={reporting || inventory.length === 0}
                 className="rounded-lg bg-[var(--accent-strong)] px-5 py-2.5 text-sm font-semibold text-[var(--accent-contrast)] transition hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {reporting ? "Generating…" : "Generate report"}
+                {reporting ? "Generating with AI…" : "Generate report"}
               </button>
             </div>
 
@@ -817,24 +886,40 @@ export default function Home() {
 
             {report && (
               <div
-                className="mt-5 rounded-[18px] border border-[var(--panel-border)] bg-[var(--panel)] p-5"
+                className="mt-5 space-y-6 rounded-[18px] border border-[var(--panel-border)] bg-[var(--panel)] p-5"
                 data-testid="report"
               >
-                <p className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
-                  Generated {new Date(report.generatedAt).toLocaleString()}
-                  {" · "}
-                  status clock {report.referenceDate}
-                </p>
-                <p className="mt-3 text-[var(--foreground)]">{report.summary}</p>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">
+                    Generated {new Date(report.generatedAt).toLocaleString()}
+                    {" · "}
+                    Today&apos;s Date {report.referenceDate}
+                    {report.aiMeta?.source === "gemini" && report.aiMeta.model
+                      ? ` · AI ${report.aiMeta.model}`
+                      : " · rules-based draft"}
+                  </p>
+                  {report.ai?.headline && (
+                    <h3 className="mt-3 font-display text-2xl font-semibold text-[var(--foreground)]">
+                      {report.ai.headline}
+                    </h3>
+                  )}
+                  <p className="mt-3 text-[var(--foreground)]">
+                    {report.ai?.weekNarrative ?? report.summary}
+                  </p>
+                  {report.ai?.executiveSummary &&
+                    report.ai.executiveSummary !== report.ai.weekNarrative && (
+                      <p className="mt-2 text-sm text-[var(--muted)]">
+                        {report.ai.executiveSummary}
+                      </p>
+                    )}
+                  {report.aiMeta?.warning && (
+                    <p className="mt-3 rounded-lg border border-[var(--warn)]/35 bg-[var(--warn)]/10 px-3 py-2 text-sm text-[var(--foreground)]">
+                      {report.aiMeta.warning}
+                    </p>
+                  )}
+                </div>
 
-                <h3 className="mt-5 font-medium">Recommendations</h3>
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--muted)]">
-                  {report.recommendations.map((tip) => (
-                    <li key={tip}>{tip}</li>
-                  ))}
-                </ul>
-
-                <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <MiniStat label="Batches" value={report.totals.itemCount} />
                   <MiniStat label="Units" value={report.totals.totalUnits} />
                   <MiniStat label="Need action" value={report.totals.needsActionCount} />
@@ -844,55 +929,186 @@ export default function Home() {
                   />
                 </div>
 
-                <p className="mt-5 text-xs text-[var(--muted)]">
-                  Most urgent first — showing{" "}
-                  {Math.min(REPORT_ROW_LIMIT, report.lines.length).toLocaleString()} of{" "}
-                  {(report.lineTotal ?? report.lines.length).toLocaleString()} batches.
-                </p>
+                {report.ai?.classifications && report.ai.classifications.length > 0 && (
+                  <div>
+                    <h3 className="font-medium">Classifications</h3>
+                    <p className="mt-1 text-sm text-[var(--muted)]">
+                      How today&apos;s batches group for a quick scan.
+                    </p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {report.ai.classifications.map((item) => (
+                        <div
+                          key={`${item.label}-${item.count}`}
+                          className="rounded-xl border border-[var(--panel-border)] bg-[var(--surface)] px-3 py-3"
+                          style={{
+                            borderColor: `color-mix(in srgb, ${severityColor(item.severity)} 45%, transparent)`,
+                          }}
+                        >
+                          <div className="flex items-baseline justify-between gap-2">
+                            <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted)]">
+                              {item.label}
+                            </p>
+                            <p
+                              className="text-lg font-semibold tabular-nums"
+                              style={{ color: severityColor(item.severity) }}
+                            >
+                              {item.count.toLocaleString()}
+                            </p>
+                          </div>
+                          <p className="mt-2 text-sm text-[var(--muted)]">{item.meaning}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-                <div className="mt-2 overflow-x-auto rounded-xl border border-[var(--panel-border)]">
-                  <table className="w-full min-w-[960px] border-collapse text-sm">
-                    <thead className="bg-[var(--surface-soft)] text-left text-[var(--muted)]">
-                      <tr>
-                        <th className="px-3 py-2 font-medium">Name</th>
-                        <th className="px-3 py-2 font-medium">Location</th>
-                        <th className="px-3 py-2 font-medium">Channel</th>
-                        <th className="px-3 py-2 text-right font-medium">In stock</th>
-                        <th className="px-3 py-2 text-right font-medium">Sold</th>
-                        <th className="px-3 py-2 font-medium">Expiration</th>
-                        <th className="px-3 py-2 font-medium">Expiration Status</th>
-                        <th className="px-3 py-2 font-medium">Stock Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {report.lines.slice(0, REPORT_ROW_LIMIT).map((line) => {
-                        const restockSoon =
-                          line.stockStatus === "understocked" &&
-                          needsRestockSoon(line) &&
-                          !isBelowMinimumStock(line);
-                        return (
-                          <tr key={line.batchKey} className="row-divider">
-                            <td className="px-3 py-2">{line.name}</td>
-                            <td className="px-3 py-2">{line.location}</td>
-                            <td className="px-3 py-2">{line.salesChannel}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">
-                              {formatUnits(line.quantity)}
-                            </td>
-                            <td className="px-3 py-2 text-right tabular-nums">
-                              {formatUnits(line.quantitySold)}
-                            </td>
-                            <td className="px-3 py-2">{line.expirationDate}</td>
-                            <td className="px-3 py-2">
-                              <ExpirationChip status={line.expirationStatus} />
-                            </td>
-                            <td className="px-3 py-2">
-                              <StockChip status={line.stockStatus} restockSoon={restockSoon} />
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                {report.ai?.chartData && (
+                  <div>
+                    <h3 className="font-medium">Graphics</h3>
+                    <p className="mt-1 text-sm text-[var(--muted)]">
+                      Batch counts by stock health, shelf life, and action mix.
+                    </p>
+                    <div className="mt-3 grid gap-4 lg:grid-cols-3">
+                      <BarChartCard
+                        title="Stock status"
+                        bars={report.ai.chartData.stockStatus}
+                      />
+                      <BarChartCard
+                        title="Expiration status"
+                        bars={report.ai.chartData.expirationStatus}
+                      />
+                      <BarChartCard
+                        title="Action mix"
+                        bars={report.ai.chartData.actionMix}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {report.ai?.outliers && report.ai.outliers.length > 0 && (
+                  <div>
+                    <h3 className="font-medium">Outliers to watch</h3>
+                    <p className="mt-1 text-sm text-[var(--muted)]">
+                      Batches that stand out from the rest of the week.
+                    </p>
+                    <ul className="mt-3 space-y-3">
+                      {report.ai.outliers.map((item) => (
+                        <li
+                          key={`${item.name}-${item.location}-${item.why}`}
+                          className="rounded-xl border border-[var(--panel-border)] bg-[var(--surface)] px-4 py-3"
+                        >
+                          <div className="flex flex-wrap items-baseline justify-between gap-2">
+                            <p className="font-medium text-[var(--foreground)]">
+                              {item.name}
+                              <span className="text-[var(--muted)]"> · {item.location}</span>
+                            </p>
+                            <span
+                              className="text-[11px] uppercase tracking-[0.12em]"
+                              style={{ color: severityColor(item.severity) }}
+                            >
+                              {item.severity}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-sm text-[var(--muted)]">{item.why}</p>
+                          <p className="mt-2 text-sm text-[var(--foreground)]">
+                            <span className="text-[var(--muted)]">Next step: </span>
+                            {item.action}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div>
+                  <h3 className="font-medium">Recommendations</h3>
+                  <ul className="mt-2 list-none space-y-2">
+                    {(report.ai?.recommendations?.length
+                      ? report.ai.recommendations
+                      : report.recommendations.map((detail, index) => ({
+                          priority: index + 1,
+                          title: `Step ${index + 1}`,
+                          detail,
+                        }))
+                    ).map((tip) => (
+                      <li
+                        key={`${tip.priority}-${tip.title}`}
+                        className="rounded-lg border border-[var(--panel-border)] bg-[var(--surface-soft)] px-3 py-2 text-sm"
+                      >
+                        <p className="font-medium text-[var(--foreground)]">
+                          {tip.priority}. {tip.title}
+                        </p>
+                        <p className="mt-1 text-[var(--muted)]">{tip.detail}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {report.ai?.supplierNotes && report.ai.supplierNotes.length > 0 && (
+                  <div>
+                    <h3 className="font-medium">Supplier &amp; farm notes</h3>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--muted)]">
+                      {report.ai.supplierNotes.map((note) => (
+                        <li key={note}>{note}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-xs text-[var(--muted)]">
+                    Most urgent batches first — showing{" "}
+                    {Math.min(REPORT_ROW_LIMIT, report.lines.length).toLocaleString()} of{" "}
+                    {(report.lineTotal ?? report.lines.length).toLocaleString()} batches.
+                  </p>
+
+                  <div className="mt-2 overflow-x-auto rounded-xl border border-[var(--panel-border)]">
+                    <table className="w-full min-w-[960px] border-collapse text-sm">
+                      <thead className="bg-[var(--surface-soft)] text-left text-[var(--muted)]">
+                        <tr>
+                          <th className="px-3 py-2 font-medium">Name</th>
+                          <th className="px-3 py-2 font-medium">Location</th>
+                          <th className="px-3 py-2 font-medium">Channel</th>
+                          <th className="px-3 py-2 text-right font-medium">In stock</th>
+                          <th className="px-3 py-2 text-right font-medium">Sold</th>
+                          <th className="px-3 py-2 font-medium">Expiration</th>
+                          <th className="px-3 py-2 font-medium">Expiration Status</th>
+                          <th className="px-3 py-2 font-medium">Stock Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {report.lines.slice(0, REPORT_ROW_LIMIT).map((line) => {
+                          const restockSoon =
+                            line.stockStatus === "understocked" &&
+                            needsRestockSoon(line) &&
+                            !isBelowMinimumStock(line);
+                          return (
+                            <tr key={line.batchKey} className="row-divider">
+                              <td className="px-3 py-2">{line.name}</td>
+                              <td className="px-3 py-2">{line.location}</td>
+                              <td className="px-3 py-2">{line.salesChannel}</td>
+                              <td className="px-3 py-2 text-right tabular-nums">
+                                {formatUnits(line.quantity)}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums">
+                                {formatUnits(line.quantitySold)}
+                              </td>
+                              <td className="px-3 py-2">{line.expirationDate}</td>
+                              <td className="px-3 py-2">
+                                <ExpirationChip status={line.expirationStatus} />
+                              </td>
+                              <td className="px-3 py-2">
+                                <StockChip
+                                  status={line.stockStatus}
+                                  restockSoon={restockSoon}
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
@@ -1022,6 +1238,62 @@ function MiniStat({ label, value }: { label: string; value: number }) {
     <div className="surface-card rounded-lg px-3 py-2">
       <p className="text-[11px] uppercase tracking-[0.12em] text-[var(--muted)]">{label}</p>
       <p className="mt-1 text-lg font-semibold tabular-nums">{value.toLocaleString()}</p>
+    </div>
+  );
+}
+
+/**
+ * Maps AI severity words to theme colours.
+ * HOW TO MAINTAIN: change these only if the palette in globals.css changes.
+ */
+function severityColor(severity: AiSeverity): string {
+  switch (severity) {
+    case "critical":
+      return "var(--danger)";
+    case "high":
+      return "var(--warn)";
+    case "medium":
+      return "var(--over)";
+    case "low":
+      return "var(--info)";
+    case "ok":
+    default:
+      return "var(--accent)";
+  }
+}
+
+/**
+ * One horizontal bar chart card inside the curated report Graphics section.
+ * WHAT THE USER SEES: a title plus labelled bars scaled to the largest value.
+ * HOW TO MAINTAIN: pass different `bars` from the AI chartData; no chart library.
+ */
+function BarChartCard({ title, bars }: { title: string; bars: AiChartBar[] }) {
+  const max = Math.max(1, ...bars.map((bar) => bar.value));
+  return (
+    <div className="rounded-xl border border-[var(--panel-border)] bg-[var(--surface)] p-3">
+      <p className="text-xs uppercase tracking-[0.12em] text-[var(--muted)]">{title}</p>
+      <ul className="mt-3 space-y-2.5">
+        {bars.map((bar) => {
+          const widthPct = Math.max(4, Math.round((bar.value / max) * 100));
+          return (
+            <li key={`${title}-${bar.label}`}>
+              <div className="flex items-baseline justify-between gap-2 text-sm">
+                <span className="text-[var(--foreground)]">{bar.label}</span>
+                <span className="tabular-nums text-[var(--muted)]">
+                  {bar.value.toLocaleString()}
+                </span>
+              </div>
+              <div className="mt-1 h-2 overflow-hidden rounded bg-[var(--surface-soft)]">
+                <div
+                  className="h-full rounded bg-[var(--accent)] transition-[width] duration-500"
+                  style={{ width: `${widthPct}%` }}
+                  aria-hidden
+                />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

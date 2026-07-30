@@ -2,10 +2,14 @@
 # Docker image for Stockflow (production)
 # ============================================================================
 # Build:  docker build -t stockflow .
-# Run:    docker run --rm -p 3000:3000 -v stockflow-data:/app/data stockflow
+# Run:    docker run --rm -p 3000:3000 \
+#           -e GEMINI_API_KEY=your-key \
+#           -e GEMINI_API_USERNAME=your-label \
+#           -v stockflow-data:/app/data stockflow
 # Open:   http://localhost:3000
 #
 # Mount /app/data so inventory updates survive container restarts.
+# Pass Gemini secrets with -e / --env-file — never bake keys into the image.
 # ============================================================================
 
 FROM node:20-alpine AS deps
