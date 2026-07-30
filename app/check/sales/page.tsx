@@ -54,8 +54,8 @@ export default function CheckSalesPage() {
             {loadedAt ? ` · loaded ${new Date(loadedAt).toLocaleString()}` : ""}
           </p>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Amounts are the summed Quantity Sold (liters/kg) for each batch. On the
-            main page, sold volume also flags batches that may need restock soon.
+            Amounts are the summed Quantity Sold (liters/kg) for each batch.
+            Sold-cover restock status on the main page is switched off for now.
           </p>
         </div>
         <ThemeToggle />

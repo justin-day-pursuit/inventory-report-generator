@@ -25,9 +25,9 @@
  * HOW TO MAINTAIN:
  * - DEFAULT_PAGE_SIZE / PAGE_SIZE_OPTIONS control how many rows show per page.
  * - List columns show Quantity in Stock and Quantity Sold (liters/kg). On-hand
- *   stock drives sold-out / overstock. Understocked uses BOTH drivers: Minimum
- *   Stock Threshold and Quantity Sold cover (in stock ≤ sold) — see
- *   isBelowMinimumStock / needsRestockSoon in lib/inventory.ts.
+ *   stock drives sold-out / overstock / understocked (Minimum Stock Threshold).
+ *   Sold-cover restock-soon is switched off — search "SOLD-COVER DRIVER" in
+ *   lib/inventory.ts (and optionally restore the chip label below).
  * - Badge numbers come from summarizeBatchStatusCounts via /api/inventory/transform
  *   (batch counts, not alert-message counts). "Need action" is the morning aggregate.
  * - Clicking a badge sets the inventory list filter (applyBadgeFilter) without scrolling.
@@ -50,8 +50,10 @@ import {
   classifyExpirationStatus,
   classifyStockStatus,
   filterInventory,
+  /* SOLD-COVER DRIVER (SWITCHED OFF) — re-enable with restockSoon chip logic below.
   isBelowMinimumStock,
   needsRestockSoon,
+  */
   type ActionFilter,
   type ExpirationStatus,
   /* ITEM STATUS CHIPS (SWITCHED OFF) — type for the commented chip strip below.
@@ -753,10 +755,12 @@ export default function Home() {
                       pageRows.map((item) => {
                         const expirationStatus = classifyExpirationStatus(item);
                         const stockStatus = classifyStockStatus(item);
+                        /* SOLD-COVER DRIVER (SWITCHED OFF) — "restock soon" chip label.
                         const restockSoon =
                           stockStatus === "understocked" &&
                           needsRestockSoon(item) &&
                           !isBelowMinimumStock(item);
+                        */
                         return (
                           <tr
                             key={item.batchKey}
@@ -785,14 +789,7 @@ export default function Home() {
                             <td className="px-4 py-3 text-right tabular-nums">
                               {formatUnits(item.quantity)}
                             </td>
-                            <td
-                              className="px-4 py-3 text-right tabular-nums"
-                              title={
-                                needsRestockSoon(item)
-                                  ? "In stock is at or below quantity sold — restock soon"
-                                  : undefined
-                              }
-                            >
+                            <td className="px-4 py-3 text-right tabular-nums">
                               {formatUnits(item.quantitySold)}
                             </td>
                             <td className="px-4 py-3">{item.expirationDate}</td>
@@ -800,7 +797,7 @@ export default function Home() {
                               <ExpirationChip status={expirationStatus} />
                             </td>
                             <td className="px-4 py-3">
-                              <StockChip status={stockStatus} restockSoon={restockSoon} />
+                              <StockChip status={stockStatus} />
                             </td>
                           </tr>
                         );
@@ -1078,10 +1075,12 @@ export default function Home() {
                       </thead>
                       <tbody>
                         {report.lines.slice(0, REPORT_ROW_LIMIT).map((line) => {
+                          /* SOLD-COVER DRIVER (SWITCHED OFF) — "restock soon" chip label.
                           const restockSoon =
                             line.stockStatus === "understocked" &&
                             needsRestockSoon(line) &&
                             !isBelowMinimumStock(line);
+                          */
                           return (
                             <tr key={line.batchKey} className="row-divider">
                               <td className="px-3 py-2">{line.name}</td>
@@ -1098,10 +1097,7 @@ export default function Home() {
                                 <ExpirationChip status={line.expirationStatus} />
                               </td>
                               <td className="px-3 py-2">
-                                <StockChip
-                                  status={line.stockStatus}
-                                  restockSoon={restockSoon}
-                                />
+                                <StockChip status={line.stockStatus} />
                               </td>
                             </tr>
                           );
@@ -1212,11 +1208,14 @@ function ExpirationChip({ status }: { status: ExpirationStatus }) {
 /** Colour-coded wording for the Stock Status column. */
 function StockChip({
   status,
+  /* SOLD-COVER DRIVER (SWITCHED OFF) — pass restockSoon to show that label.
   restockSoon,
+  */
 }: {
   status: StockStatus;
-  /** When true, show "restock soon" instead of "understocked" (sold-cover signal). */
+  /* SOLD-COVER DRIVER (SWITCHED OFF)
   restockSoon?: boolean;
+  */
 }) {
   const styles: Record<StockStatus, string> = {
     healthy: "text-[var(--accent)]",
@@ -1226,7 +1225,8 @@ function StockChip({
   };
   const labels: Record<StockStatus, string> = {
     healthy: "healthy",
-    understocked: restockSoon ? "restock soon" : "understocked",
+    understocked: "understocked",
+    // SOLD-COVER DRIVER (SWITCHED OFF): understocked: restockSoon ? "restock soon" : "understocked",
     overstocked: "overstocked",
     out_of_stock: "sold out",
   };

@@ -29,11 +29,15 @@
  *   Customer locations
  *     → running list of the distinct Customer Location values in the batch
  *
- * STOCK STATUS uses Quantity in Stock as on-hand. Understocked / restock-soon
- * is driven by BOTH of these (either one is enough):
- *   1) Quantity in Stock ≤ Minimum Stock Threshold (reorder line)
- *   2) Quantity in Stock ≤ Quantity Sold (sold-cover / restock-soon signal)
+ * STOCK STATUS uses Quantity in Stock as on-hand.
+ * Understocked is driven by Minimum Stock Threshold only for now:
+ *   Quantity in Stock ≤ Minimum Stock Threshold
  * Overstocked still uses the threshold + reorder multiple on in-stock levels.
+ *
+ * SOLD-COVER DRIVER (SWITCHED OFF):
+ * Quantity Sold can also flag restock-soon when in stock ≤ sold. Search
+ * "SOLD-COVER DRIVER (SWITCHED OFF)" in this file (needsRestockSoon /
+ * classifyStockStatus / buildAlerts) to turn it back on.
  *
  * HOW TO MAINTAIN:
  * - Alert / filter windows (days to expiry, overstock multiple, test "today")
@@ -128,8 +132,8 @@ export type InventoryItem = {
   quantity: number;
   /**
    * Sum of "Quantity Sold (liters/kg)" across the batch.
-   * Second understock driver alongside Minimum Stock Threshold: when on-hand
-   * stock is at or below sold volume, the batch is flagged restock soon.
+   * Shown in the list / sales check view. Not used for stock status right now —
+   * search "SOLD-COVER DRIVER (SWITCHED OFF)" to re-enable restock-soon from sold.
    */
   quantitySold: number;
   /**
@@ -322,7 +326,7 @@ export function classifyExpirationStatus(
 /**
  * True when on-hand Quantity in Stock is at or below the summed Minimum Stock
  * Threshold (with the default floor when a batch has no threshold).
- * This is the classic reorder-line driver — kept in addition to sold-cover.
+ * This is the active reorder-line driver for understocked status.
  */
 export function isBelowMinimumStock(item: InventoryItem): boolean {
   const onHand = item.quantity;
@@ -330,10 +334,17 @@ export function isBelowMinimumStock(item: InventoryItem): boolean {
 }
 
 /**
- * True when remaining stock is at or below what has already sold in the batch.
- * That means less than (or equal to) one "sold period" of cover left — a
- * restock-soon signal even if the minimum-threshold line has not been hit yet.
- * Used together with isBelowMinimumStock (either driver flags understocked).
+ * SOLD-COVER DRIVER (SWITCHED OFF)
+ * ---------------------------------------------------------
+ * True when remaining stock is at or below what has already sold in the batch
+ * (less than or equal to one "sold period" of cover left).
+ *
+ * HOW TO TURN IT BACK ON:
+ *   1) Uncomment the `needsRestockSoon(item)` checks in classifyStockStatus
+ *      and buildAlerts below (search this file for "SOLD-COVER DRIVER").
+ *   2) Optionally restore the "restock soon" chip label on app/page.tsx
+ *      (search "SOLD-COVER DRIVER (SWITCHED OFF)" there too).
+ * Status filter / Need action badge then include these batches again automatically.
  */
 export function needsRestockSoon(item: InventoryItem): boolean {
   const onHand = item.quantity;
@@ -344,17 +355,18 @@ export function needsRestockSoon(item: InventoryItem): boolean {
 /**
  * Stock Status column — Quantity in Stock is on-hand.
  *
- * Understocked / restock-soon uses BOTH drivers (either one is enough):
- *   1) isBelowMinimumStock — in stock ≤ Minimum Stock Threshold
- *   2) needsRestockSoon — in stock ≤ Quantity Sold
+ * Understocked (active): isBelowMinimumStock — in stock ≤ Minimum Stock Threshold.
  *
- * Priority:
- *   sold out → understocked (min threshold OR sold-cover) → overstocked → healthy
+ * SOLD-COVER DRIVER (SWITCHED OFF): also OR in needsRestockSoon (in stock ≤ sold).
+ *
+ * Priority: sold out → understocked → overstocked → healthy
  */
 export function classifyStockStatus(item: InventoryItem): StockStatus {
   const onHand = item.quantity;
   if (onHand <= 0) return "out_of_stock";
-  if (isBelowMinimumStock(item) || needsRestockSoon(item)) return "understocked";
+  if (isBelowMinimumStock(item)) return "understocked";
+  // SOLD-COVER DRIVER (SWITCHED OFF) — uncomment to also flag restock-soon from sold:
+  // if (needsRestockSoon(item)) return "understocked";
   if (onHand >= overstockLevel(item)) return "overstocked";
   return "healthy";
 }
@@ -442,13 +454,6 @@ export function buildAlerts(items: InventoryItem[], now: Date = new Date()): Inv
         location: item.location,
         message: `Only ${round1(onHand)} in stock at ${item.location} (below minimum ${round1(minimum)}; suggested reorder ${round1(item.reorderQuantity)}).`,
       });
-    } else if (needsRestockSoon(item)) {
-      alerts.push({
-        kind: "understocked",
-        name: item.name,
-        location: item.location,
-        message: `Restock soon at ${item.location}: ${round1(onHand)} in stock vs ${round1(item.quantitySold)} already sold (min threshold ${round1(minimum)}; suggested reorder ${round1(item.reorderQuantity || DEFAULT_REORDER_QUANTITY)}).`,
-      });
     } else if (onHand >= overstock) {
       alerts.push({
         kind: "overstocked",
@@ -457,6 +462,16 @@ export function buildAlerts(items: InventoryItem[], now: Date = new Date()): Inv
         message: `${round1(onHand)} in stock at ${item.location} is above the overstock line of ${round1(overstock)}.`,
       });
     }
+    /* SOLD-COVER DRIVER (SWITCHED OFF) — insert before the overstock branch above:
+    else if (needsRestockSoon(item)) {
+      alerts.push({
+        kind: "understocked",
+        name: item.name,
+        location: item.location,
+        message: `Restock soon at ${item.location}: ${round1(onHand)} in stock vs ${round1(item.quantitySold)} already sold (min threshold ${round1(minimum)}; suggested reorder ${round1(item.reorderQuantity || DEFAULT_REORDER_QUANTITY)}).`,
+      });
+    }
+    */
   }
 
   return alerts;
@@ -738,7 +753,7 @@ export function generateStockReport(items: InventoryItem[], now: Date = new Date
       ? `${totals.expiredCount} expired / ${totals.expiringSoonCount} expiring within ${EXPIRING_SOON_DAYS} days.`
       : "No immediate expiration risk.",
     totals.understockedCount + totals.outOfStockCount > 0
-      ? `${totals.outOfStockCount} sold out / ${totals.understockedCount} understocked or need restock soon.`
+      ? `${totals.outOfStockCount} sold out / ${totals.understockedCount} under the reorder line.`
       : "Reorder lines are currently covered.",
   ].join(" ");
 
