@@ -249,16 +249,19 @@ export async function readInventoryTable(): Promise<CsvTable> {
 }
 
 /**
- * Loads the inventory as UNIQUE BATCHES for the coordinator list.
+ * Turns CSV text into UNIQUE BATCHES for the coordinator list.
+ *
+ * Safe to call from API routes that receive an uploaded file, or from the
+ * on-disk reader below. Does not touch the filesystem itself.
  *
  * Steps:
- *   1) Read every CSV line
+ *   1) Parse the CSV text into rows
  *   2) Group by Location + Product Name + Brand + Storage Condition + Sales Channel
  *   3) Sum / earliest-date / running-list as documented at the top of this file
  *   4) Sort by name, then location, then sales channel for a stable table order
  */
-export async function readInventory(): Promise<InventoryItem[]> {
-  const table = await readInventoryTable();
+export function inventoryFromCsvText(csvText: string): InventoryItem[] {
+  const table = parseCsv(csvText);
   const groups = new Map<string, SourceRow[]>();
 
   table.rows.forEach((row, index) => {
@@ -283,6 +286,31 @@ export async function readInventory(): Promise<InventoryItem[]> {
         a.location.localeCompare(b.location) ||
         a.salesChannel.localeCompare(b.salesChannel)
     );
+}
+
+/**
+ * Loads the on-disk inventory CSV and returns UNIQUE BATCHES.
+ * Used by APIs that still read data/inventory/inventory.csv directly.
+ */
+export async function readInventory(): Promise<InventoryItem[]> {
+  const raw = await fs.readFile(DATA_PATHS.inventoryFile, "utf8").catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
+    throw error;
+  });
+  return inventoryFromCsvText(raw);
+}
+
+/**
+ * Reads the raw on-disk inventory CSV as plain text (for "Load from codebase").
+ * Returns an empty string when the file is missing.
+ */
+export async function readInventoryCsvText(): Promise<string> {
+  try {
+    return await fs.readFile(DATA_PATHS.inventoryFile, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
+    throw error;
+  }
 }
 
 /**
