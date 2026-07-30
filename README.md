@@ -104,7 +104,7 @@ npm run docker:run
 
 ## How to use the page
 
-1. **Alert cards** summarize need-action (morning aggregate), sold out, understocked, overstocked, expiring soon, and expired batches. Each number is a batch count. Click a card to apply that filter to the inventory list.
+1. **Alert cards** summarize need-action (morning aggregate), sold out, understocked, expiring soon, and expired batches. Each number is a batch count. Click a card to apply that filter to the inventory list. (Overstocked has no summary badge; use the Show filter or Stock Status column.)
 2. **Inventory batches** (default filter **Needs action**) lists batches that are expired, expiring within 14 days, sold out, or understocked. Columns: Name, Location, Sales Channel, Storage Conditions, Quantity, Expiration, Expiration Status, Stock Status. Switch the filter to Overstocked / Healthy / All batches as needed. 50 rows per page by default (Rows dropdown goes to 500).
 3. **Department data sync** — commented out in `app/page.tsx` (search `DEPARTMENT DATA SYNC (SWITCHED OFF)` to restore). Report success/error messages now show in the curated report section.
 4. **Theme toggle** — defaults to light mode.
