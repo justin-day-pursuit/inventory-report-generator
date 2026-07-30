@@ -10,6 +10,8 @@
  * A batch is Location + Product Name + Brand + Storage Condition + Sales Channel.
  * `sourceRecordCount` is how many CSV lines those batches were built from.
  * `referenceDate` is the fake "today" used for shelf-life status (see APP_REFERENCE_DATE).
+ * `alertCounts` counts BATCHES in each status (including the morning "Need action"
+ * overview). Individual status badges can overlap; do not add them up.
  * ============================================================================
  */
 
@@ -19,7 +21,7 @@ import {
   APP_REFERENCE_DATE,
   appToday,
   buildAlerts,
-  summarizeAlertCounts,
+  summarizeBatchStatusCounts,
 } from "@/lib/inventory";
 
 /** How many individual alerts are sent to the browser for the alert chip strip. */
@@ -38,7 +40,7 @@ export async function GET() {
       referenceDate: appToday().toISOString().slice(0, 10) || APP_REFERENCE_DATE,
       alerts: alerts.slice(0, ALERT_PREVIEW_LIMIT),
       alertTotal: alerts.length,
-      alertCounts: summarizeAlertCounts(alerts),
+      alertCounts: summarizeBatchStatusCounts(items),
       source: INVENTORY_SOURCE,
       loadedAt: new Date().toISOString(),
     });

@@ -7,9 +7,13 @@
  * and the light/dark ThemeProvider.
  *
  * HOW TO MAINTAIN:
- * - The beforeInteractive Script reads localStorage BEFORE paint so users do not
- *   see a flash of the wrong theme. If you rename THEME_STORAGE_KEY in
- *   lib/theme.ts, update the string in that script too.
+ * - The beforeInteractive Script picks the theme BEFORE paint so users do not
+ *   see a flash of the wrong colours. Order of preference:
+ *     1) saved choice in localStorage (after the user used the theme toggle)
+ *     2) device / OS setting (prefers-color-scheme)
+ *     3) SSR_FALLBACK_THEME
+ * - If you rename THEME_STORAGE_KEY in lib/theme.ts, update this file's import
+ *   (the boot script reads the constant — keep them in sync).
  * - Use next/script (not a raw <script> in JSX) to avoid the React 19 warning
  *   about script tags inside components.
  * ============================================================================
@@ -19,7 +23,7 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Sora } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
-import { DEFAULT_THEME, THEME_STORAGE_KEY } from "@/lib/theme";
+import { SSR_FALLBACK_THEME, THEME_STORAGE_KEY } from "@/lib/theme";
 import "./globals.css";
 
 const sora = Sora({
@@ -48,16 +52,29 @@ export const metadata: Metadata = {
     "Monitor inventory, sync sales and incoming supplies, and generate stock reports.",
 };
 
-/** Tiny boot script: apply saved theme before React hydrates (avoids flash). */
+/**
+ * Tiny boot script: apply theme before React hydrates (avoids a flash).
+ * Uses the saved toggle if present; otherwise follows the OS light/dark setting.
+ */
 const themeBootScript = `
 (function () {
+  var fallback = ${JSON.stringify(SSR_FALLBACK_THEME)};
   try {
     var key = ${JSON.stringify(THEME_STORAGE_KEY)};
     var stored = localStorage.getItem(key);
-    var theme = (stored === "light" || stored === "dark") ? stored : ${JSON.stringify(DEFAULT_THEME)};
+    var theme;
+    if (stored === "light" || stored === "dark") {
+      theme = stored;
+    } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      theme = "dark";
+    } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) {
+      theme = "light";
+    } else {
+      theme = fallback;
+    }
     document.documentElement.setAttribute("data-theme", theme);
   } catch (e) {
-    document.documentElement.setAttribute("data-theme", ${JSON.stringify(DEFAULT_THEME)});
+    document.documentElement.setAttribute("data-theme", fallback);
   }
 })();
 `;
@@ -70,7 +87,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      data-theme={DEFAULT_THEME}
+      data-theme={SSR_FALLBACK_THEME}
       className={`${sora.variable} ${plexSans.variable} ${plexMono.variable}`}
       suppressHydrationWarning
     >

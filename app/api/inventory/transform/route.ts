@@ -18,7 +18,7 @@ import {
   APP_REFERENCE_DATE,
   appToday,
   buildAlerts,
-  summarizeAlertCounts,
+  summarizeBatchStatusCounts,
 } from "@/lib/inventory";
 
 /** How many individual alerts are sent to the browser for the alert chip strip. */
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
       referenceDate: appToday().toISOString().slice(0, 10) || APP_REFERENCE_DATE,
       alerts: alerts.slice(0, ALERT_PREVIEW_LIMIT),
       alertTotal: alerts.length,
-      alertCounts: summarizeAlertCounts(alerts),
+      alertCounts: summarizeBatchStatusCounts(items),
       source: "uploaded-or-codebase-csv",
       transformedAt: new Date().toISOString(),
     });

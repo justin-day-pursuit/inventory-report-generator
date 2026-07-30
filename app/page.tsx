@@ -22,7 +22,13 @@
  *
  * HOW TO MAINTAIN:
  * - DEFAULT_PAGE_SIZE / PAGE_SIZE_OPTIONS control how many rows show per page.
- * - The department sync buttons stay inert (search "SWITCHED OFF").
+ * - Badge numbers come from summarizeBatchStatusCounts via /api/inventory/transform
+ *   (batch counts, not alert-message counts). "Need action" is the morning aggregate.
+ * - Clicking a badge sets the inventory list filter (applyBadgeFilter) without scrolling.
+ * - Item status chips under the badges are switched off — search "ITEM STATUS CHIPS".
+ * - Department data sync panel is commented out on main — not shown in this load-first UI.
+ * - Report success/error banners also appear in the Curated inventory report section
+ *   once data is displayed; staging messages stay in the load section.
  * ============================================================================
  */
 
@@ -38,7 +44,9 @@ import {
   filterInventory,
   type ActionFilter,
   type ExpirationStatus,
+  /* ITEM STATUS CHIPS (SWITCHED OFF) — type for the commented chip strip below.
   type InventoryAlert,
+  */
   type InventoryItem,
   type StockReport,
   type StockStatus,
@@ -54,6 +62,8 @@ const PAGE_SIZE_OPTIONS = [25, 50, 100, 250, 500];
 const REPORT_ROW_LIMIT = 100;
 
 type AlertCounts = {
+  /** Morning overview: batches that are expired, expiring soon, sold out, or understocked. */
+  needsAction: number;
   outOfStock: number;
   understocked: number;
   overstocked: number;
@@ -62,6 +72,7 @@ type AlertCounts = {
 };
 
 const EMPTY_COUNTS: AlertCounts = {
+  needsAction: 0,
   outOfStock: 0,
   understocked: 0,
   overstocked: 0,
@@ -100,8 +111,10 @@ export default function Home() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [sourceRecordCount, setSourceRecordCount] = useState(0);
   const [referenceDate, setReferenceDate] = useState(APP_REFERENCE_DATE);
+  /* ITEM STATUS CHIPS (SWITCHED OFF) — re-enable with the chip strip below the badges.
   const [alerts, setAlerts] = useState<InventoryAlert[]>([]);
   const [alertTotal, setAlertTotal] = useState(0);
+  */
   const [alertCounts, setAlertCounts] = useState<AlertCounts>(EMPTY_COUNTS);
   const [search, setSearch] = useState("");
   /** Default morning view: only batches that need a decision today. */
@@ -133,8 +146,10 @@ export default function Home() {
     setInventory([]);
     setSourceRecordCount(0);
     setReferenceDate(APP_REFERENCE_DATE);
+    /* ITEM STATUS CHIPS (SWITCHED OFF)
     setAlerts([]);
     setAlertTotal(0);
+    */
     setAlertCounts(EMPTY_COUNTS);
     setSearch("");
     setActionFilter("needs_action");
@@ -167,8 +182,10 @@ export default function Home() {
       // Staging a new file clears any previous display so old badges cannot linger.
       setDataDisplayed(false);
       setInventory([]);
+      /* ITEM STATUS CHIPS (SWITCHED OFF)
       setAlerts([]);
       setAlertTotal(0);
+      */
       setAlertCounts(EMPTY_COUNTS);
       setReport(null);
       setStagedCsvText(text);
@@ -193,8 +210,10 @@ export default function Home() {
       if (!text.trim()) throw new Error("Codebase inventory CSV was empty.");
       setDataDisplayed(false);
       setInventory([]);
+      /* ITEM STATUS CHIPS (SWITCHED OFF)
       setAlerts([]);
       setAlertTotal(0);
+      */
       setAlertCounts(EMPTY_COUNTS);
       setReport(null);
       setStagedCsvText(text);
@@ -230,9 +249,11 @@ export default function Home() {
       setInventory(data.items ?? []);
       setSourceRecordCount(data.sourceRecordCount ?? 0);
       setReferenceDate(data.referenceDate ?? APP_REFERENCE_DATE);
+      /* ITEM STATUS CHIPS (SWITCHED OFF)
       setAlerts(data.alerts ?? []);
       setAlertTotal(data.alertTotal ?? (data.alerts?.length ?? 0));
-      setAlertCounts(data.alertCounts ?? EMPTY_COUNTS);
+      */
+      setAlertCounts({ ...EMPTY_COUNTS, ...(data.alertCounts ?? {}) });
       setPage(1);
       setActionFilter("needs_action");
       setReport(null);
@@ -305,6 +326,24 @@ export default function Home() {
     [inventory, dataDisplayed]
   );
 
+  /**
+   * Applies the inventory list filter that matches a clicked alert badge.
+   * Also jumps back to page 1 of the list. Does NOT scroll the page — the
+   * coordinator stays on the badge strip and can glance down when ready.
+   *
+   * Badge → filter mapping (must stay in sync with the <select> options below):
+   *   Need action   → needs_action
+   *   Sold out      → out_of_stock
+   *   Understocked  → understocked
+   *   Expiring soon → expiring_soon
+   *   Expired       → expired
+   * Overstocked has no badge (filter + stock status still exist — see Show dropdown).
+   */
+  function applyBadgeFilter(filter: ActionFilter) {
+    setActionFilter(filter);
+    setPage(1);
+  }
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const pageRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -323,19 +362,29 @@ export default function Home() {
             Load a dairy inventory CSV, then display what needs attention today —
             low stock, upcoming expirations, and reorder candidates.
           </p>
-          {/* Today's date / status clock — scroll target after Display */}
+          {/*
+            STATUS LINE — scroll target after Display.
+            Shows Today's Date (APP_REFERENCE_DATE), expiring window, and
+            how many batches need action once inventory is displayed.
+          */}
           <p
             id="todays-date"
             ref={todaysDateRef}
-            className="mt-2 scroll-mt-6 text-xs text-[var(--muted)]"
+            className="mt-2 scroll-mt-6 text-[var(--muted)]"
           >
-            Today&apos;s date (status clock):{" "}
-            <span className="font-mono text-[var(--foreground)]">{referenceDate}</span>
+            <span className="font-bold">Today&apos;s Date</span>:{" "}
+            <span className="font-mono">{referenceDate}</span>
             {" · "}
             expiring window: {EXPIRING_SOON_DAYS} days
-            {dataDisplayed
-              ? ` · ${needsActionCount.toLocaleString()} batches need action`
-              : " · load a CSV to begin"}
+            {dataDisplayed ? (
+              <>
+                {" · "}
+                <span className="font-bold">{needsActionCount.toLocaleString()}</span>{" "}
+                batches need action
+              </>
+            ) : (
+              " · load a CSV to begin"
+            )}
           </p>
         </div>
         <div className="shrink-0 sm:pt-1">
@@ -427,12 +476,13 @@ export default function Home() {
           </div>
         )}
 
-        {message && (
+        {/* Staging / load feedback — report section owns banners after Display. */}
+        {!dataDisplayed && message && (
           <p className="mt-4 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-2 text-sm">
             {message}
           </p>
         )}
-        {error && (
+        {!dataDisplayed && error && (
           <p className="mt-4 rounded-lg border border-[var(--danger)]/40 bg-[var(--danger)]/10 px-4 py-2 text-sm">
             {error}
           </p>
@@ -442,49 +492,75 @@ export default function Home() {
       {/* ---- Alerts + inventory: only after Display ---- */}
       {dataDisplayed ? (
         <>
+          {/*
+            ALERT BADGES — batch counts from summarizeBatchStatusCounts.
+            Need action first; Overstocked badge switched off; chips switched off.
+            Click a badge to set the Show filter (no page scroll).
+          */}
           <section
             aria-label="Inventory alerts"
-            className="anim-rise anim-rise-delay-1 mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
+            className="anim-rise anim-rise-delay-1 mb-6 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5"
           >
+            <AlertCard
+              label="Need action"
+              value={alertCounts.needsAction}
+              tone="action"
+              pulse={alertCounts.needsAction > 0}
+              filter="needs_action"
+              active={actionFilter === "needs_action"}
+              onSelect={applyBadgeFilter}
+            />
             <AlertCard
               label="Sold out"
               value={alertCounts.outOfStock}
               tone="danger"
               pulse={alertCounts.outOfStock > 0}
+              filter="out_of_stock"
+              active={actionFilter === "out_of_stock"}
+              onSelect={applyBadgeFilter}
             />
-            <AlertCard label="Understocked" value={alertCounts.understocked} tone="warn" />
-            <AlertCard label="Overstocked" value={alertCounts.overstocked} tone="over" />
+            <AlertCard
+              label="Understocked"
+              value={alertCounts.understocked}
+              tone="warn"
+              filter="understocked"
+              active={actionFilter === "understocked"}
+              onSelect={applyBadgeFilter}
+            />
+            {/*
+              OVERSTOCKED BADGE (SWITCHED OFF) — keep status + Show filter; no badge.
+            <AlertCard
+              label="Overstocked"
+              value={alertCounts.overstocked}
+              tone="over"
+              filter="overstocked"
+              active={actionFilter === "overstocked"}
+              onSelect={applyBadgeFilter}
+            />
+            */}
             <AlertCard
               label="Expiring soon"
               value={alertCounts.expiringSoon}
               tone="warn"
               pulse={alertCounts.expiringSoon > 0}
+              filter="expiring_soon"
+              active={actionFilter === "expiring_soon"}
+              onSelect={applyBadgeFilter}
             />
-            <AlertCard label="Expired" value={alertCounts.expired} tone="danger" />
+            <AlertCard
+              label="Expired"
+              value={alertCounts.expired}
+              tone="danger"
+              filter="expired"
+              active={actionFilter === "expired"}
+              onSelect={applyBadgeFilter}
+            />
           </section>
 
-          {alerts.length > 0 && (
-            <div className="anim-rise anim-rise-delay-1 mb-6 flex flex-wrap gap-2">
-              {alerts.slice(0, 8).map((alert, index) => (
-                <span
-                  key={`${alert.kind}-${alert.name}-${alert.location}-${index}`}
-                  className="rounded-md border border-[var(--panel-border)] bg-[var(--surface-soft)] px-2.5 py-1 text-xs text-[var(--muted)]"
-                  title={alert.message}
-                >
-                  <strong className="text-[var(--foreground)]">{alert.name}</strong>
-                  {" · "}
-                  {alert.location}
-                  {" · "}
-                  {alert.kind.replaceAll("_", " ")}
-                </span>
-              ))}
-              {alertTotal > 8 && (
-                <span className="px-2.5 py-1 text-xs text-[var(--muted)]">
-                  +{(alertTotal - 8).toLocaleString()} more
-                </span>
-              )}
-            </div>
-          )}
+          {/*
+            ITEM STATUS CHIPS (SWITCHED OFF)
+            Uncomment with alerts / alertTotal state + InventoryAlert import.
+          */}
 
           <section aria-label="Current inventory" className="anim-rise anim-rise-delay-2 mb-8">
             <div className="mb-3">
@@ -532,6 +608,7 @@ export default function Home() {
                       }}
                       className="input-field rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[var(--accent)]/40"
                     >
+                      <option value="all">All batches</option>
                       <option value="needs_action">Needs action</option>
                       <option value="expired">Expired</option>
                       <option value="expiring_soon">Expiring soon</option>
@@ -539,7 +616,6 @@ export default function Home() {
                       <option value="understocked">Understocked</option>
                       <option value="overstocked">Overstocked</option>
                       <option value="healthy">Healthy</option>
-                      <option value="all">All batches</option>
                     </select>
                   </label>
 
@@ -662,7 +738,11 @@ export default function Home() {
             </div>
           </section>
 
-          {/* ---- Report generation ---- */}
+          {/*
+            CURATED INVENTORY REPORT
+            Success/error banners for Display + Generate report show here once
+            inventory is on screen (staging messages stay in the load section).
+          */}
           <section aria-label="Generate inventory report" className="mb-10">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -681,6 +761,17 @@ export default function Home() {
                 {reporting ? "Generating…" : "Generate report"}
               </button>
             </div>
+
+            {message && (
+              <p className="mt-4 rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-2 text-sm">
+                {message}
+              </p>
+            )}
+            {error && (
+              <p className="mt-4 rounded-lg border border-[var(--danger)]/40 bg-[var(--danger)]/10 px-4 py-2 text-sm">
+                {error}
+              </p>
+            )}
 
             {report && (
               <div
@@ -775,16 +866,26 @@ export default function Home() {
 /* Small presentational helpers                                               */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * One coloured summary badge in the morning overview strip.
+ * Clicking applies the matching Show filter (see applyBadgeFilter).
+ */
 function AlertCard({
   label,
   value,
   tone,
   pulse,
+  filter,
+  active,
+  onSelect,
 }: {
   label: string;
   value: number;
-  tone: "danger" | "warn" | "over" | "info";
+  tone: "danger" | "warn" | "over" | "info" | "action";
   pulse?: boolean;
+  filter: ActionFilter;
+  active: boolean;
+  onSelect: (filter: ActionFilter) => void;
 }) {
   const color =
     tone === "danger"
@@ -793,23 +894,35 @@ function AlertCard({
         ? "var(--warn)"
         : tone === "over"
           ? "var(--over)"
-          : "var(--info)";
+          : tone === "action"
+            ? "var(--accent)"
+            : "var(--info)";
 
   return (
-    <div
-      className={`surface-card rounded-xl px-4 py-3 ${pulse ? "alert-pulse" : ""}`}
+    <button
+      type="button"
+      onClick={() => onSelect(filter)}
+      aria-pressed={active}
+      title={`Show ${label.toLowerCase()} batches in the list below`}
+      className={`surface-card w-full rounded-xl px-3 py-2.5 text-left transition hover:bg-[var(--hover-fill)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/50 ${
+        pulse ? "alert-pulse" : ""
+      }`}
       style={{
-        borderColor: value > 0 ? `color-mix(in srgb, ${color} 45%, transparent)` : undefined,
+        borderColor: `color-mix(in srgb, ${color} ${active || value > 0 ? 55 : 20}%, transparent)`,
+        boxShadow: active ? `0 0 0 2px color-mix(in srgb, ${color} 55%, transparent)` : undefined,
+        background: active ? `color-mix(in srgb, ${color} 10%, transparent)` : undefined,
       }}
     >
-      <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">{label}</p>
+      <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--muted)] leading-tight">
+        {label}
+      </p>
       <p
-        className="mt-1 text-2xl font-semibold tabular-nums"
-        style={{ color: value > 0 ? color : undefined }}
+        className="mt-1 text-xl font-semibold tabular-nums sm:text-2xl"
+        style={{ color: value > 0 || active ? color : undefined }}
       >
         {value.toLocaleString()}
       </p>
-    </div>
+    </button>
   );
 }
 
