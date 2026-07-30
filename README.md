@@ -88,6 +88,10 @@ npm run docker:run
 2. **Auth:** Routes are currently open — put the service on a private network or add auth before public exposure.
 3. **Seed vs live data:** `inventory.seed.csv` is the untouched original; `inventory.csv` is the live copy.
 4. **Config:** Copy `.env.example` → `.env.local` for local overrides.
+   For AI reports, set `GEMINI_API_USERNAME` (account label) and `GEMINI_API_KEY`
+   (secret from [Google AI Studio](https://aistudio.google.com/apikey)).
+   On a host, set the same names as environment secrets — never use a
+   `NEXT_PUBLIC_` prefix on the key (that would expose it in the browser).
 
 ## Scripts
 
@@ -108,7 +112,11 @@ npm run docker:run
 2. **Inventory batches** (default filter **Needs action**) lists batches that are expired, expiring within 14 days, sold out, or understocked. Columns: Name, Location, Sales Channel, Storage Conditions, Quantity, Expiration, Expiration Status, Stock Status. Switch the filter to Overstocked / Healthy / All batches as needed. 50 rows per page by default (Rows dropdown goes to 500).
 3. **Department data sync** — commented out in `app/page.tsx` (search `DEPARTMENT DATA SYNC (SWITCHED OFF)` to restore). Report success/error messages now show in the curated report section.
 4. **Theme toggle** — defaults to the device / OS theme (system light → light, system dark → dark). After you toggle, that choice is remembered in the browser.
-5. **Generate report** — curated status report with reorder and shelf-life recommendations; status banners appear in this section.
+5. **Generate report** — calls Google Gemini (server-side) with raw CSV + batch
+   status digests to build a manager-ready weekly narrative: classifications,
+   outliers, bar charts, recommendations, and supplier notes. Needs
+   `GEMINI_API_KEY` in `.env.local` (see `.env.example`). Without a key, a
+   rules-based draft still appears. Status banners show in this section.
 
 ## Data layout
 
@@ -123,8 +131,10 @@ npm run docker:run
 - `app/check/*` — sales / incoming check tabs
 - `app/api/*` — inventory, sales, incoming, update, report, health
 - `lib/inventory.ts` — status rules, filters, alerts, report
+- `lib/ai-report.ts` — Gemini prompt + structured AI narrative (server-only)
+- `lib/gemini.ts` — reads `GEMINI_API_*` from env; never expose to the browser
 - `lib/csv.ts` — CSV reader / writer
 - `lib/data-store.ts` — CSV I/O and batch aggregation
 - `lib/validate.ts` — API body validation
 - `components/*` — theme provider / toggle
-- `Dockerfile` — production container
+- `Dockerfile` — production container (pass Gemini secrets with `-e`)

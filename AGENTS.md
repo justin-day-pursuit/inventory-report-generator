@@ -17,7 +17,8 @@ When you add or change code, update nearby comments so someone who is not very t
 - Lint: `npm run lint` (`eslint .` with flat `eslint.config.mjs`). CI: `npm run ci`.
 - Build: `npm run build` with `output: "standalone"` in `next.config.mjs`. Security response headers are configured there.
 - Health: `GET /api/health`.
-- Core logic: `lib/inventory.ts` (expiration/stock status, action filters, alerts, report), `lib/data-store.ts` (CSV I/O + batch aggregation), `lib/csv.ts` (CSV parse/serialize), `lib/validate.ts` (API validation).
+- Core logic: `lib/inventory.ts` (expiration/stock status, action filters, alerts, report), `lib/data-store.ts` (CSV I/O + batch aggregation), `lib/csv.ts` (CSV parse/serialize), `lib/validate.ts` (API validation), `lib/gemini.ts` + `lib/ai-report.ts` (Google Gemini curated report — server-only).
+- AI curated report: `GET /api/report` loads raw CSV + transformed batches, calls Gemini with FreshRoute/Alicia context, returns narrative + classifications + outliers + chart bars. Secrets: `GEMINI_API_USERNAME`, `GEMINI_API_KEY`, optional `GEMINI_MODEL` in `.env.local` (gitignored) or host env — never `NEXT_PUBLIC_*`. Fallback rules-based narrative if the key is missing.
 - Data files:
   - `data/inventory/inventory.csv` — live dairy dataset (writable by update)
   - `data/inventory/inventory.seed.csv` — untouched original; `npm run restore:inventory`
