@@ -29,9 +29,11 @@
  *   Customer locations
  *     → running list of the distinct Customer Location values in the batch
  *
- * STOCK STATUS uses Quantity in Stock as on-hand, and Quantity Sold as a restock
- * signal: when remaining stock is at or below what has already sold, the batch
- * is treated as understocked / needs restock soon.
+ * STOCK STATUS uses Quantity in Stock as on-hand. Understocked / restock-soon
+ * is driven by BOTH of these (either one is enough):
+ *   1) Quantity in Stock ≤ Minimum Stock Threshold (reorder line)
+ *   2) Quantity in Stock ≤ Quantity Sold (sold-cover / restock-soon signal)
+ * Overstocked still uses the threshold + reorder multiple on in-stock levels.
  *
  * HOW TO MAINTAIN:
  * - Alert / filter windows (days to expiry, overstock multiple, test "today")
@@ -126,8 +128,8 @@ export type InventoryItem = {
   quantity: number;
   /**
    * Sum of "Quantity Sold (liters/kg)" across the batch.
-   * Used as a restock signal: when on-hand stock is at or below sold volume,
-   * the batch is flagged understocked / needs restock soon.
+   * Second understock driver alongside Minimum Stock Threshold: when on-hand
+   * stock is at or below sold volume, the batch is flagged restock soon.
    */
   quantitySold: number;
   /**
@@ -318,9 +320,20 @@ export function classifyExpirationStatus(
 }
 
 /**
+ * True when on-hand Quantity in Stock is at or below the summed Minimum Stock
+ * Threshold (with the default floor when a batch has no threshold).
+ * This is the classic reorder-line driver — kept in addition to sold-cover.
+ */
+export function isBelowMinimumStock(item: InventoryItem): boolean {
+  const onHand = item.quantity;
+  return onHand > 0 && onHand <= minimumStockLevel(item);
+}
+
+/**
  * True when remaining stock is at or below what has already sold in the batch.
  * That means less than (or equal to) one "sold period" of cover left — a
  * restock-soon signal even if the minimum-threshold line has not been hit yet.
+ * Used together with isBelowMinimumStock (either driver flags understocked).
  */
 export function needsRestockSoon(item: InventoryItem): boolean {
   const onHand = item.quantity;
@@ -329,16 +342,19 @@ export function needsRestockSoon(item: InventoryItem): boolean {
 }
 
 /**
- * Stock Status column — uses Quantity in Stock as on-hand, plus Quantity Sold
- * as a restock signal (see needsRestockSoon).
+ * Stock Status column — Quantity in Stock is on-hand.
+ *
+ * Understocked / restock-soon uses BOTH drivers (either one is enough):
+ *   1) isBelowMinimumStock — in stock ≤ Minimum Stock Threshold
+ *   2) needsRestockSoon — in stock ≤ Quantity Sold
  *
  * Priority:
- *   sold out → understocked (below min OR restock-soon from sold) → overstocked → healthy
+ *   sold out → understocked (min threshold OR sold-cover) → overstocked → healthy
  */
 export function classifyStockStatus(item: InventoryItem): StockStatus {
   const onHand = item.quantity;
   if (onHand <= 0) return "out_of_stock";
-  if (onHand <= minimumStockLevel(item) || needsRestockSoon(item)) return "understocked";
+  if (isBelowMinimumStock(item) || needsRestockSoon(item)) return "understocked";
   if (onHand >= overstockLevel(item)) return "overstocked";
   return "healthy";
 }
@@ -419,19 +435,19 @@ export function buildAlerts(items: InventoryItem[], now: Date = new Date()): Inv
         location: item.location,
         message: `Sold out at ${item.location} — reorder ${round1(item.reorderQuantity || DEFAULT_REORDER_QUANTITY)}.`,
       });
-    } else if (onHand <= minimum) {
+    } else if (isBelowMinimumStock(item)) {
       alerts.push({
         kind: "understocked",
         name: item.name,
         location: item.location,
-        message: `Only ${round1(onHand)} in stock at ${item.location} (reorder at ${round1(minimum)}; suggested ${round1(item.reorderQuantity)}).`,
+        message: `Only ${round1(onHand)} in stock at ${item.location} (below minimum ${round1(minimum)}; suggested reorder ${round1(item.reorderQuantity)}).`,
       });
     } else if (needsRestockSoon(item)) {
       alerts.push({
         kind: "understocked",
         name: item.name,
         location: item.location,
-        message: `Restock soon at ${item.location}: ${round1(onHand)} in stock vs ${round1(item.quantitySold)} already sold (suggested reorder ${round1(item.reorderQuantity || DEFAULT_REORDER_QUANTITY)}).`,
+        message: `Restock soon at ${item.location}: ${round1(onHand)} in stock vs ${round1(item.quantitySold)} already sold (min threshold ${round1(minimum)}; suggested reorder ${round1(item.reorderQuantity || DEFAULT_REORDER_QUANTITY)}).`,
       });
     } else if (onHand >= overstock) {
       alerts.push({

@@ -23,8 +23,9 @@
  * HOW TO MAINTAIN:
  * - DEFAULT_PAGE_SIZE / PAGE_SIZE_OPTIONS control how many rows show per page.
  * - List columns show Quantity in Stock and Quantity Sold (liters/kg). On-hand
- *   stock drives sold-out / overstock; Quantity Sold also flags restock-soon
- *   (in stock ≤ sold) as understocked — see needsRestockSoon in lib/inventory.ts.
+ *   stock drives sold-out / overstock. Understocked uses BOTH drivers: Minimum
+ *   Stock Threshold and Quantity Sold cover (in stock ≤ sold) — see
+ *   isBelowMinimumStock / needsRestockSoon in lib/inventory.ts.
  * - Badge numbers come from summarizeBatchStatusCounts via /api/inventory/transform
  *   (batch counts, not alert-message counts). "Need action" is the morning aggregate.
  * - Clicking a badge sets the inventory list filter (applyBadgeFilter) without scrolling.
@@ -46,6 +47,7 @@ import {
   classifyStockStatus,
   filterInventory,
   minimumStockLevel,
+  isBelowMinimumStock,
   needsRestockSoon,
   type ActionFilter,
   type ExpirationStatus,
@@ -694,7 +696,7 @@ export default function Home() {
                         const restockSoon =
                           stockStatus === "understocked" &&
                           needsRestockSoon(item) &&
-                          item.quantity > minimumStockLevel(item);
+                          !isBelowMinimumStock(item);
                         return (
                           <tr
                             key={item.batchKey}
@@ -868,7 +870,7 @@ export default function Home() {
                         const restockSoon =
                           line.stockStatus === "understocked" &&
                           needsRestockSoon(line) &&
-                          line.quantity > minimumStockLevel(line);
+                          !isBelowMinimumStock(line);
                         return (
                           <tr key={line.batchKey} className="row-divider">
                             <td className="px-3 py-2">{line.name}</td>

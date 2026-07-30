@@ -17,7 +17,7 @@ CSV lines that share **Location + Product Name + Brand + Storage Condition + Sal
 | Customer locations | Running list of distinct `Customer Location` values |
 | Name | Brand + Product Name |
 
-**Stock status:** on-hand is summed **Quantity in Stock**. A batch is understocked when stock is at or below the summed **Minimum Stock Threshold**, or when stock is at or below summed **Quantity Sold** (restock-soon cover). Overstock still uses the threshold + reorder multiple.
+**Stock status:** on-hand is summed **Quantity in Stock**. Understocked / restock-soon uses **both** drivers (either one is enough): (1) stock ≤ summed **Minimum Stock Threshold**, and (2) stock ≤ summed **Quantity Sold**. Overstock still uses the threshold + reorder multiple.
 
 **Status clock:** shelf life is measured against `APP_REFERENCE_DATE` in `lib/inventory.ts` (default `2018-11-20`, near the earliest expiration in the file), not the real calendar, so this historical export still shows a useful mix of expired / expiring / ok. Switch `STATUS_CLOCK` to `"real_today"` for a live feed.
 
